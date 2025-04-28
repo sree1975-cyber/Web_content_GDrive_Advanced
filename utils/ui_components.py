@@ -20,7 +20,7 @@ def apply_css():
         border-radius: 8px;
         margin-bottom: 1rem;
     }
-    .header-admin { background-color: #ADD8E6 !important; } /* Light blue for admin */
+    .header-admin { background-color: #5a7de3 !important; } /* Light blue for admin */
     .header-guest { background-color: #90EE90 !important; } /* Light parrot green for guest */
     .header-public { background-color: #D8BFD8 !important; } /* Light purple for public */
     .login-container {
