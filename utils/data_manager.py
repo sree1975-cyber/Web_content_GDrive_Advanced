@@ -10,7 +10,21 @@ import os
 def get_drive_service():
     """Initialize Google Drive API service"""
     try:
+        if "gdrive" not in st.secrets:
+            logging.error("No 'gdrive' section found in secrets.toml")
+            st.error("❌ Google Drive configuration is missing. Add [gdrive] section to secrets.toml in Streamlit Cloud settings with service account credentials and folder_id.")
+            return None
+        
         creds_dict = st.secrets["gdrive"]
+        logging.debug(f"Loaded gdrive secrets: keys={list(creds_dict.keys())}")
+        
+        required_keys = ["type", "project_id", "private_key_id", "private_key", "client_email", "client_id", "auth_uri", "token_uri", "auth_provider_x509_cert_url", "client_x509_cert_url", "folder_id"]
+        missing_keys = [key for key in required_keys if key not in creds_dict]
+        if missing_keys:
+            logging.error(f"Missing keys in gdrive secrets: {missing_keys}")
+            st.error(f"❌ Incomplete Google Drive configuration. Missing keys: {missing_keys}. Update secrets.toml in Streamlit Cloud settings.")
+            return None
+        
         creds = ServiceAccountCredentials.from_json_keyfile_dict(
             creds_dict, 
             scopes=[
@@ -21,18 +35,15 @@ def get_drive_service():
         drive_service = build('drive', 'v3', credentials=creds)
         logging.debug("Google Drive service initialized successfully")
         return drive_service
-    except KeyError as e:
-        logging.error(f"Google Drive secrets missing: {str(e)}. Ensure 'gdrive' key is in secrets.toml")
-        st.error("❌ Google Drive configuration is missing. Add [gdrive] section to secrets.toml in Streamlit Cloud settings with service account credentials and folder_id.")
-        return None
     except Exception as e:
         logging.error(f"Failed to initialize Google Drive service: {str(e)}")
-        st.error(f"❌ Failed to initialize Google Drive: {str(e)}. Check service account credentials.")
+        st.error(f"❌ Failed to initialize Google Drive: {str(e)}. Check service account credentials in secrets.toml.")
         return None
 
 def get_file_id(drive_service, file_name, folder_id):
     """Get the file ID of an Excel file in Google Drive"""
     if not drive_service:
+        logging.error("No drive service available")
         return None
     try:
         query = f"name='{file_name}' and '{folder_id}' in parents and trashed=false"
@@ -52,6 +63,7 @@ def load_data(file_name, folder_id):
     """Load data from an Excel file in Google Drive"""
     drive_service = get_drive_service()
     if not drive_service:
+        logging.error(f"Cannot load data for {file_name}: No drive service")
         return None
     
     file_id = get_file_id(drive_service, file_name, folder_id)
@@ -81,6 +93,7 @@ def save_data(df, file_name):
     """Save DataFrame to an Excel file in Google Drive"""
     drive_service = get_drive_service()
     if not drive_service:
+        logging.error(f"Cannot save data to {file_name}: No drive service")
         return False
     
     try:
@@ -120,6 +133,7 @@ def save_data(df, file_name):
             logging.debug(f"Created new file {file_name} with ID {file_id}")
         
         os.remove(temp_file)
+        logging.debug(f"Successfully saved {file_name} to Google Drive")
         return True
     except Exception as e:
         logging.error(f"Failed to save data to {file_name}: {str(e)}")
