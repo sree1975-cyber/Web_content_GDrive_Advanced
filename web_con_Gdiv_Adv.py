@@ -34,11 +34,12 @@ def main():
     # Get mode and username
     mode = st.session_state["mode"]
     username = st.session_state.get("username", None)
+    logging.debug(f"Main: mode={mode}, username={username}")
     
     # Display header
     display_header(mode, username)
     
-    # Initialize DataFrame based on mode
+    # Initialize DataFrame and Excel file based on mode
     if mode == "public":
         user_df = st.session_state["user_df"]
         excel_file = None
@@ -47,6 +48,7 @@ def main():
         # Determine Excel file based on mode and username
         excel_file = f"links_{username}.xlsx" if mode == "guest" and username else "links.xlsx"
         folder_id = st.secrets["gdrive"].get("folder_id", "") if "gdrive" in st.secrets else ""
+        logging.debug(f"Excel file set to: {excel_file}, folder_id={folder_id}")
         
         # Load data from Google Drive
         user_df = load_data(excel_file, folder_id)
