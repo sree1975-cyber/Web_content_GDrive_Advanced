@@ -199,6 +199,17 @@ def browse_section(df, excel_file, mode):
             'created_at', 'updated_at', 'priority', 'number', 'is_duplicate'
         ]))
     
+    # Ensure all required columns exist
+    required_columns = ['link_id', 'url', 'title', 'description', 'tags', 'created_at', 'updated_at', 'priority', 'number', 'is_duplicate']
+    for col in required_columns:
+        if col not in df.columns:
+            if col == 'tags':
+                df[col] = [[] for _ in range(len(df))]
+            elif col == 'is_duplicate':
+                df[col] = False
+            else:
+                df[col] = ''
+    
     # Search and filter
     search_query = st.text_input("Search Links", placeholder="Enter keywords or tags...")
     
@@ -230,34 +241,47 @@ def browse_section(df, excel_file, mode):
         st.markdown("<h4>View All Links as Data Table</h4>", unsafe_allow_html=True)
         display_df = filtered_df[['url', 'title', 'description', 'tags', 'priority', 'number', 'is_duplicate']].copy()
         display_df['tags'] = display_df['tags'].apply(lambda x: ", ".join(x) if isinstance(x, list) else '')
+        display_df['select'] = False  # Add select column explicitly
         
-        # Add checkbox column for selection
+        # Define column configuration for data_editor
+        column_config = {
+            "select": st.column_config.CheckboxColumn("Select", default=False),
+            "url": st.column_config.TextColumn("URL"),
+            "title": st.column_config.TextColumn("Title"),
+            "description": st.column_config.TextColumn("Description"),
+            "tags": st.column_config.TextColumn("Tags"),
+            "priority": st.column_config.TextColumn("Priority"),
+            "number": st.column_config.NumberColumn("Number"),
+            "is_duplicate": st.column_config.CheckboxColumn("Is Duplicate")
+        }
+        
+        # Display data_editor with checkboxes
         edited_df = st.data_editor(
             display_df,
-            column_config={
-                "select": st.column_config.CheckboxColumn("Select", default=False)
-            },
+            column_config=column_config,
             hide_index=True,
             use_container_width=True,
-            disabled=['url', 'title', 'description', 'tags', 'priority', 'number', 'is_duplicate'],
-            num_rows="dynamic"
+            disabled=['url', 'title', 'description', 'tags', 'priority', 'number', 'is_duplicate']
         )
         
         # Delete selected links
         if st.button("🗑️ Delete Selected Links", key="delete_button"):
-            selected_indices = edited_df[edited_df['select'] == True].index
-            if not selected_indices.empty:
-                selected_link_ids = filtered_df.iloc[selected_indices]['link_id'].tolist()
-                updated_df = delete_selected_links(df, selected_link_ids, excel_file, mode)
-                if mode == "public":
-                    st.session_state['user_df'] = updated_df
+            if 'select' in edited_df.columns:
+                selected_indices = edited_df[edited_df['select'] == True].index
+                if not selected_indices.empty:
+                    selected_link_ids = filtered_df.iloc[selected_indices]['link_id'].tolist()
+                    updated_df = delete_selected_links(df, selected_link_ids, excel_file, mode)
+                    if mode == "public":
+                        st.session_state['user_df'] = updated_df
+                    else:
+                        st.session_state['df'] = updated_df
+                    st.success("✅ Selected links deleted successfully!")
+                    st.balloons()
+                    st.rerun()
                 else:
-                    st.session_state['df'] = updated_df
-                st.success("✅ Selected links deleted successfully!")
-                st.balloons()
-                st.rerun()
+                    st.error("❌ Please select at least one link to delete.")
             else:
-                st.error("❌ Please select at least one link to delete.")
+                st.error("❌ Selection column not found. Please try again.")
     
     if filtered_df.empty:
         st.info("No links match the search criteria.")
