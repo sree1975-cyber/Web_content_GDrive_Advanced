@@ -1,0 +1,10 @@
+streamlit>=1.31.0
+pandas==2.2.3
+requests==2.32.3
+beautifulsoup4==4.12.3
+openpyxl==3.1.5
+streamlit-option-menu==0.3.13
+google-api-python-client==2.149.0
+google-auth==2.35.0
+scikit-learn==1.5.2
+numpy==2.1.2
