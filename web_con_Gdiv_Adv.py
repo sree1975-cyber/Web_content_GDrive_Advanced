@@ -1,14 +1,16 @@
 import streamlit as st
+
+# Streamlit page configuration must be the first command
+st.set_page_config(page_title="Web Content Manager", layout="wide")
+
 import pandas as pd
 from utils.data_manager import load_data
 from utils.ui_components import display_header, login_form, add_link_section, browse_section, download_section, analytics_section
 import logging
+from datetime import datetime
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-# Streamlit page configuration
-st.set_page_config(page_title="Web Content Manager", layout="wide")
 
 # Initialize session state
 if "mode" not in st.session_state:
