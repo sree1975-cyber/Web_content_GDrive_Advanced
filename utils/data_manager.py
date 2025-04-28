@@ -23,11 +23,11 @@ def get_drive_service():
         return drive_service
     except KeyError as e:
         logging.error(f"Google Drive secrets missing: {str(e)}. Ensure 'gdrive' key is in secrets.toml")
-        st.error("❌ Google Drive configuration is missing. Please check secrets.toml in Streamlit Cloud settings.")
+        st.error("❌ Google Drive configuration is missing. Add [gdrive] section to secrets.toml in Streamlit Cloud settings with service account credentials and folder_id.")
         return None
     except Exception as e:
         logging.error(f"Failed to initialize Google Drive service: {str(e)}")
-        st.error(f"❌ Failed to initialize Google Drive: {str(e)}")
+        st.error(f"❌ Failed to initialize Google Drive: {str(e)}. Check service account credentials.")
         return None
 
 def get_file_id(drive_service, file_name, folder_id):
@@ -91,6 +91,10 @@ def save_data(df, file_name):
         output_df.to_excel(temp_file, index=False)
         
         folder_id = st.secrets["gdrive"].get("folder_id", "")
+        if not folder_id:
+            logging.error("Missing folder_id in gdrive secrets")
+            st.error("❌ Missing folder_id in Google Drive configuration. Update secrets.toml.")
+            return False
         
         file_id = get_file_id(drive_service, file_name, folder_id)
         
