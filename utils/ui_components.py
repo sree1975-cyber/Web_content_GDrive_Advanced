@@ -7,6 +7,7 @@ import logging
 from io import BytesIO
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
+import time
 
 # CSS for responsive design and color schemes
 st.markdown("""
@@ -17,11 +18,11 @@ st.markdown("""
     border-radius: 8px;
     margin-bottom: 1rem;
 }
-.header-admin { background-color: #ADD8E6; } /* Light blue for admin */
-.header-guest { background-color: #90EE90; } /* Light parrot green for guest */
-.header-public { background-color: #D8BFD8; } /* Light purple for public */
+.header-admin { background-color: #ADD8E6 !important; } /* Light blue for admin */
+.header-guest { background-color: #90EE90 !important; } /* Light parrot green for guest */
+.header-public { background-color: #D8BFD8 !important; } /* Light purple for public */
 .login-container {
-    background-color: #FFB6C1; /* Light bluish-pink */
+    background-color: #FFB6C1 !important; /* Light bluish-pink */
     padding: 2rem;
     border-radius: 8px;
     text-align: center;
@@ -56,17 +57,24 @@ st.markdown("""
         overflow-x: auto;
     }
 }
+
+/* Debug CSS application */
+.debug-css::after {
+    content: "CSS Loaded";
+    display: none;
+}
 </style>
+<div class="debug-css"></div>
 """, unsafe_allow_html=True)
 
 def display_header(mode, username=None):
     """Display the app header with mode-specific styling and logout button"""
     header_class = f"header-{mode}"
     st.markdown(f"""
-    <div class='{header_class}'>
-        <h1 style='margin: 0;'>Web Content Manager</h1>
-        <p style='margin: 0.5rem 0 0;'>Organize and manage your web links efficiently</p>
-        <p style='margin: 0.5rem 0 0;'>{mode.capitalize()} Mode{f' ({username})' if username else ''}</p>
+    <div class="{header_class}">
+        <h1 style="margin: 0;">Web Content Manager</h1>
+        <p style="margin: 0.5rem 0 0;">Organize and manage your web links efficiently</p>
+        <p style="margin: 0.5rem 0 0;">{mode.capitalize()} Mode{f" ({username})" if username else ""}</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -80,9 +88,9 @@ def display_header(mode, username=None):
 def login_form():
     """Display login form for Admin, Guest, or Public access"""
     st.markdown("""
-    <div class='login-container'>
-        <h2 class='login-title'>Welcome to Web Content Manager</h2>
-        <p class='login-info'>Log in as Admin, Guest, or continue as a Public user.</p>
+    <div class="login-container">
+        <h2 class="login-title">Welcome to Web Content Manager</h2>
+        <p class="login-info">Log in as Admin, Guest, or continue as a Public user.</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -132,10 +140,9 @@ def add_link_section(df, excel_file, mode):
     st.markdown("<h3>Add New Link or Upload Bookmarks</h3>", unsafe_allow_html=True)
     
     # Initialize session state for metadata
-    if "fetched_metadata" not in st.session_state:
-        st.session_state["fetched_metadata"] = {}
+    if "single_url_metadata" not in st.session_state:
+        st.session_state["single_url_metadata"] = {}
     
-    # Ensure tabs are always rendered
     tab1, tab2 = st.tabs(["Single URL", "Upload Bookmarks"])
     
     recommended_tags = [
@@ -143,29 +150,48 @@ def add_link_section(df, excel_file, mode):
     ]
     
     with tab1:
-        with st.form(key="single_url_form", clear_on_submit=True):
+        with st.form(key="single_url_form", clear_on_submit=False):
             st.markdown("<h4>Add Single URL</h4>", unsafe_allow_html=True)
             
-            url = st.text_input("URL", placeholder="https://example.com", key="url_input_single")
-            fetch_button = st.form_submit_button(
-                "Fetch Metadata",
-                help="Fetch title and description from the URL"
+            # Store URL in session state to persist across reruns
+            if "temp_url" not in st.session_state:
+                st.session_state["temp_url"] = ""
+            
+            url = st.text_input(
+                "URL",
+                value=st.session_state["temp_url"],
+                placeholder="https://example.com",
+                key="url_input_single"
             )
+            # Update temp_url on input change
+            st.session_state["temp_url"] = url
+            
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                fetch_button = st.form_submit_button(
+                    "Fetch Metadata",
+                    help="Fetch title and description from the URL"
+                )
+            with col2:
+                save_button = st.form_submit_button(
+                    "💾 Save Link",
+                    help="Save the link to your collection"
+                )
             
             title = st.text_input(
                 "Title (optional)",
-                value=st.session_state["fetched_metadata"].get("title", ""),
+                value=st.session_state["single_url_metadata"].get("title", ""),
                 key="title_input_single"
             )
             description = st.text_area(
                 "Description (optional)",
-                value=st.session_state["fetched_metadata"].get("description", ""),
+                value=st.session_state["single_url_metadata"].get("description", ""),
                 key="description_input_single"
             )
             tags = st.multiselect(
                 "Tags (select or type custom tags)",
                 options=recommended_tags,
-                default=st.session_state["fetched_metadata"].get("tags", []),
+                default=st.session_state["single_url_metadata"].get("tags", []),
                 key="tags_input_single",
                 help="Select or type tags (press Enter to add)"
             )
@@ -177,51 +203,75 @@ def add_link_section(df, excel_file, mode):
             if custom_tag and custom_tag not in tags:
                 tags.append(custom_tag)
             
-            priority = st.selectbox("Priority", ["Low", "Medium", "High", "Important"], index=0, key="priority_single")
-            number = st.number_input("Number (for grouping)", min_value=0, value=0, step=1, key="number_single")
-            
-            save_button = st.form_submit_button(
-                "💾 Save Link",
-                help="Save the link to your collection"
+            priority = st.selectbox(
+                "Priority",
+                ["Low", "Medium", "High", "Important"],
+                index=0,
+                key="priority_single"
+            )
+            number = st.number_input(
+                "Number (for grouping)",
+                min_value=0,
+                value=0,
+                step=1,
+                key="number_single"
             )
             
             if fetch_button and url:
                 with st.spinner("Fetching metadata..."):
                     metadata = fetch_metadata(url)
-                    st.session_state["fetched_metadata"] = {
+                    st.session_state["single_url_metadata"] = {
                         "title": metadata.get("title", ""),
                         "description": metadata.get("description", ""),
                         "tags": []
                     }
                     st.info("✅ Metadata fetched! Fields updated.")
                     st.rerun()
+            elif fetch_button:
+                st.error("❌ Please provide a URL.")
             
-            if save_button and url:
-                new_df = save_link(df, url, title, description, tags, priority, number, mode)
-                if mode in ["admin", "guest"] and excel_file:
-                    if save_data(new_df, excel_file):
+            if save_button:
+                if url:
+                    new_df = save_link(df, url, title, description, tags, priority, number, mode)
+                    if mode in ["admin", "guest"] and excel_file:
+                        if save_data(new_df, excel_file):
+                            st.success("✅ Link saved successfully!")
+                            if new_df.iloc[-1]["is_duplicate"]:
+                                st.warning("⚠️ This URL is a duplicate.")
+                            st.balloons()
+                            # Clear session state
+                            st.session_state["single_url_metadata"] = {}
+                            st.session_state["temp_url"] = ""
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to save link to Google Drive.")
+                    else:
                         st.success("✅ Link saved successfully!")
                         if new_df.iloc[-1]["is_duplicate"]:
                             st.warning("⚠️ This URL is a duplicate.")
                         st.balloons()
-                        st.session_state["fetched_metadata"] = {}
-                    else:
-                        st.error("❌ Failed to save link to Google Drive.")
+                        # Clear session state
+                        st.session_state["single_url_metadata"] = {}
+                        st.session_state["temp_url"] = ""
+                        st.rerun()
+                    return new_df
                 else:
-                    st.success("✅ Link saved successfully!")
-                    if new_df.iloc[-1]["is_duplicate"]:
-                        st.warning("⚠️ This URL is a duplicate.")
-                    st.balloons()
-                    st.session_state["fetched_metadata"] = {}
-                return new_df
-            elif save_button:
-                st.error("❌ Please provide a URL.")
+                    st.error("❌ Please provide a URL.")
     
     with tab2:
         st.markdown("<h4>Upload Browser Bookmarks</h4>", unsafe_allow_html=True)
         with st.form(key="upload_bookmarks_form", clear_on_submit=True):
-            uploaded_file = st.file_uploader("Upload Bookmarks (Excel, CSV, HTML)", type=["xlsx", "csv", "html"], key="bookmark_uploader")
-            duplicate_action = st.selectbox("Handle Duplicates", ["Keep Both", "Skip Duplicates"], index=0, key="duplicate_action")
+            uploaded_file = st.file_uploader(
+                "Upload Bookmarks (Excel, CSV, HTML)",
+                type=["xlsx", "csv", "html"],
+                key="bookmark_uploader"
+            )
+            duplicate_action = st.selectbox(
+                "Handle Duplicates",
+                ["Keep Both", "Skip Duplicates"],
+                index=0,
+                key="duplicate_action"
+            )
             
             if st.form_submit_button("Import Bookmarks", help="Import bookmarks from file"):
                 if uploaded_file:
@@ -317,22 +367,27 @@ def browse_section(df, excel_file, mode):
         )
         
         if st.button("🗑️ Delete Selected Links", help="Delete selected links"):
-            if "delete" in edited_df.columns:
-                selected_indices = edited_df[edited_df["delete"] == True].index
-                if not selected_indices.empty:
-                    selected_link_ids = filtered_df.iloc[selected_indices]["link_id"].tolist()
-                    updated_df = delete_selected_links(df, selected_link_ids, excel_file, mode)
-                    if mode == "public":
-                        st.session_state["user_df"] = updated_df
+            try:
+                if "delete" in edited_df.columns:
+                    selected_indices = edited_df[edited_df["delete"] == True].index
+                    if not selected_indices.empty:
+                        selected_link_ids = filtered_df.iloc[selected_indices]["link_id"].tolist()
+                        updated_df = delete_selected_links(df, selected_link_ids, excel_file, mode)
+                        if mode == "public":
+                            st.session_state["user_df"] = updated_df
+                        else:
+                            st.session_state["df"] = updated_df
+                        st.success("✅ Selected links deleted successfully!")
+                        st.snow()
+                        time.sleep(2)  # Ensure animation renders
+                        st.rerun()
                     else:
-                        st.session_state["df"] = updated_df
-                    st.success("✅ Selected links deleted successfully!")
-                    st.snow()
-                    st.rerun()
+                        st.error("❌ Please select at least one link to delete.")
                 else:
-                    st.error("❌ Please select at least one link to delete.")
-            else:
-                st.error("❌ Deletion column not found.")
+                    st.error("❌ Deletion column not found.")
+            except Exception as e:
+                st.error(f"❌ Failed to delete links: {str(e)}")
+                logging.error(f"Delete links failed: {str(e)}")
     
     if filtered_df.empty:
         st.info("No links match the search criteria.")
@@ -349,7 +404,7 @@ def download_section(df, excel_file, mode):
     if not df_to_export.empty:
         output = pd.DataFrame()
         output["sequence_number"] = range(1, len(df_to_export) + 1)
-        output["link_id"] = df_to_export["link_id"]  # Include link_id
+        output["link_id"] = df_to_export["link_id"]
         output["url"] = df_to_export["url"]
         output["title"] = df_to_export["title"]
         output["description"] = df_to_export["description"]
@@ -366,9 +421,9 @@ def download_section(df, excel_file, mode):
             workbook = writer.book
             worksheet = writer.sheets["Links"]
             
-            # Add hyperlinks to URL column
+            # Add hyperlinks to URL column (column C, since link_id is column B)
             for idx, url in enumerate(output["url"], start=2):
-                worksheet[f"C{idx}"].hyperlink = url  # Column C (url)
+                worksheet[f"C{idx}"].hyperlink = url
                 worksheet[f"C{idx}"].style = "Hyperlink"
             
         buffer.seek(0)
