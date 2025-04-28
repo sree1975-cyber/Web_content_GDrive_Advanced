@@ -5,6 +5,7 @@ from utils.data_manager import save_data
 from utils.link_operations import save_link, delete_selected_links, fetch_metadata, process_bookmark_file
 import logging
 from io import BytesIO
+import time  # Added for delay
 
 def display_header(mode, username=None):
     """Display the app header with mode-specific styling"""
@@ -264,7 +265,7 @@ def browse_section(df, excel_file, mode):
             column_config=column_config,
             hide_index=True,
             use_container_width=True,
-            disabled=['url', 'title', 'description', 'tags', 'priority', 'number', 'is_duplicate']
+            disabled=['url', 'title', 'description', 'tags', 'priority', "number", 'is_duplicate']
         )
         
         # Delete selected links
@@ -280,6 +281,7 @@ def browse_section(df, excel_file, mode):
                         st.session_state['df'] = updated_df
                     st.success("✅ Selected links deleted successfully!")
                     st.snow()  # Snowfall animation for deletion
+                    time.sleep(2)  # Delay to allow animation and message to display
                     st.rerun()
                 else:
                     st.error("❌ Please select at least one link to delete.")
