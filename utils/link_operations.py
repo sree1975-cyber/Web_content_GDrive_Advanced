@@ -5,9 +5,8 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import logging
 import uuid
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.cluster import KMeans
-import numpy as np
+from transformers import pipeline  # Added for BERT classifier
+import re
 
 def fetch_metadata(url):
     """Fetch metadata for a given URL"""
@@ -74,6 +73,33 @@ def delete_selected_links(df, selected_ids, excel_file, mode):
         logging.error(f"Delete links failed: {str(e)}")
         return df
 
+def predict_tag(text, url):
+    """Predict a single tag for a URL using BERT classifier or fallback rules"""
+    categories = ['News', 'Shopping', 'Research', 'Entertainment', 'Other']
+    
+    try:
+        # Initialize BERT classifier (zero-shot for simplicity)
+        classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
+        result = classifier(text, candidate_labels=categories, multi_label=False)
+        return result['labels'][0]  # Return the top predicted tag
+    except Exception as e:
+        logging.error(f"BERT tag prediction failed: {str(e)}")
+        # Fallback: Rule-based tagging
+        text_lower = text.lower()
+        url_lower = url.lower()
+        
+        # Simple keyword-based rules
+        if any(keyword in text_lower or keyword in url_lower for keyword in ['news', 'article', 'report', 'cnn', 'bbc']):
+            return 'News'
+        elif any(keyword in text_lower or keyword in url_lower for keyword in ['shop', 'store', 'buy', 'amazon', 'ebay']):
+            return 'Shopping'
+        elif any(keyword in text_lower or keyword in url_lower for keyword in ['research', 'study', 'paper', 'academic', 'edu']):
+            return 'Research'
+        elif any(keyword in text_lower or keyword in url_lower for keyword in ['entertainment', 'movie', 'music', 'youtube', 'netflix']):
+            return 'Entertainment'
+        else:
+            return 'Other'
+
 def process_bookmark_file(df, uploaded_file, mode, duplicate_action, progress_bar):
     """Process uploaded bookmark file (Excel, CSV, HTML) and categorize URLs"""
     try:
@@ -135,24 +161,15 @@ def process_bookmark_file(df, uploaded_file, mode, duplicate_action, progress_ba
             link['is_duplicate'] = link['url'] in existing_urls
             if link['is_duplicate'] and duplicate_action == "Skip Duplicates":
                 continue
+            # Predict tag using BERT or fallback
+            text = f"{link['title']} {link['description']}"
+            link['tags'] = predict_tag(text, link['url'])
             processed_links.append(link)
             existing_urls.add(link['url'])
             progress_bar.progress((i + 1) / total_links)
         
         if not processed_links:
             raise ValueError("No new URLs to process after duplicate handling.")
-        
-        # ML-based single tag prediction
-        texts = [f"{link['title']} {link['description']}" for link in processed_links]
-        vectorizer = TfidfVectorizer(max_features=1000, stop_words='english')
-        X = vectorizer.fit_transform(texts)
-        kmeans = KMeans(n_clusters=min(5, len(processed_links)), random_state=42)
-        labels = kmeans.fit_predict(X)
-        
-        categories = ['News', 'Shopping', 'Research', 'Entertainment', 'Other']
-        for i, link in enumerate(processed_links):
-            cluster = labels[i]
-            link['tags'] = categories[cluster % len(categories)]  # Assign single tag as string
         
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         new_rows = pd.DataFrame([
