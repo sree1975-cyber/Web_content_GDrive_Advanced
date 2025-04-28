@@ -138,7 +138,7 @@ def login_form():
                 st.info("Click 'Continue as Public User' to access the app without saving to Google Drive.")
         
         submit_button = st.form_submit_button("Login", disabled=(mode == "Public"))
-        public_button = st.form_submit_button("Continue as Public User", disabled=(mode != "Public"))
+        public_button = st.form_submit_button("👥 Continue as Public User", disabled=(mode != "Public"))
         
         if submit_button:
             if mode == "Admin":
