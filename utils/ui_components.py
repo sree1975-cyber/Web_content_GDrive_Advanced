@@ -15,17 +15,16 @@ def apply_css():
     """Apply CSS for consistent color scheme across the app"""
     css = """
     <style>
-    /* Base styles */
     .header-admin, .header-guest, .header-public {
         padding: 1rem;
         border-radius: 8px;
         margin-bottom: 1rem;
     }
-    .header-admin { background-color: #ADD8E6 !important; } /* Light blue for admin */
-    .header-guest { background-color: #90EE90 !important; } /* Light parrot green for guest */
-    .header-public { background-color: #D8BFD8 !important; } /* Light purple for public */
+    .header-admin { background-color: #ADD8E6 !important; }
+    .header-guest { background-color: #90EE90 !important; }
+    .header-public { background-color: #D8BFD8 !important; }
     .login-container {
-        background-color: #FFB6C1 !important; /* Light bluish-pink */
+        background-color: #FFB6C1 !important;
         padding: 2rem;
         border-radius: 8px;
         text-align: center;
@@ -46,8 +45,6 @@ def apply_css():
         transform: translateX(-50%);
         white-space: nowrap;
     }
-
-    /* Responsive design */
     @media (max-width: 768px) {
         .stForm, .stDataFrame {
             font-size: 14px;
@@ -60,8 +57,6 @@ def apply_css():
             overflow-x: auto;
         }
     }
-
-    /* Debug CSS application */
     .debug-css::after {
         content: "CSS Loaded";
         display: none;
@@ -78,7 +73,7 @@ def get_domain(url):
         domain = parsed.netloc.lower()
         if domain.startswith('www.'):
             domain = domain[4:]
-        return domain  # e.g., youtube.com, cnn.com
+        return domain
     except Exception as e:
         logging.error(f"Failed to parse URL {url}: {str(e)}")
         return ""
@@ -104,7 +99,7 @@ def display_header(mode, username=None):
         st.rerun()
 
 def login_form():
-    """Display login form for Admin, Guest, or Public access with improved UX"""
+    """Display login form with immediate field rendering for Guest mode"""
     apply_css()
     st.markdown("""
     <div class="login-container">
@@ -113,36 +108,55 @@ def login_form():
     </div>
     """, unsafe_allow_html=True)
     
-    with st.form(key="login_form", clear_on_submit=False):
-        mode = st.radio("Select Login Type", ["Admin", "Guest", "Public"], index=0)
-        
-        # Use a container to dynamically render fields based on mode
-        input_container = st.container()
-        with input_container:
-            if mode == "Admin":
-                password = st.text_input("Admin Password", type="password", key="admin_password")
-            elif mode == "Guest":
-                username = st.text_input(
-                    "Username",
-                    key="guest_username",
-                    placeholder="Enter your username",
-                    help="Required for Guest mode"
-                )
-                password = st.text_input(
-                    "Guest Password",
-                    type="password",
-                    key="guest_password",
-                    help="Enter the guest password"
-                )
-            else:
-                st.info("Click 'Continue as Public User' to access the app without saving to Google Drive.")
-        
+    # Initialize session state for inputs
+    if "guest_username" not in st.session_state:
+        st.session_state["guest_username"] = ""
+    if "guest_password" not in st.session_state:
+        st.session_state["guest_password"] = ""
+    if "admin_password" not in st.session_state:
+        st.session_state["admin_password"] = ""
+    
+    # Radio button for mode selection
+    mode = st.radio("Select Login Type", ["Admin", "Guest", "Public"], index=0, key="login_mode")
+    logging.debug(f"Login mode selected: {mode}")
+    
+    # Render input fields directly
+    if mode == "Admin":
+        st.session_state["admin_password"] = st.text_input(
+            "Admin Password",
+            type="password",
+            value=st.session_state["admin_password"],
+            key="admin_password",
+            placeholder="Enter admin password",
+            help="Enter the admin password"
+        )
+    elif mode == "Guest":
+        st.session_state["guest_username"] = st.text_input(
+            "Username",
+            value=st.session_state["guest_username"],
+            key="guest_username",
+            placeholder="Enter your username",
+            help="Required for Guest mode"
+        )
+        st.session_state["guest_password"] = st.text_input(
+            "Guest Password",
+            type="password",
+            value=st.session_state["guest_password"],
+            key="guest_password",
+            placeholder="Enter guest password",
+            help="Enter the guest password"
+        )
+    else:
+        st.info("Click 'Continue as Public User' to access the app without saving to Google Drive.")
+    
+    # Submission form
+    with st.form(key="login_submit_form", clear_on_submit=False):
         submit_button = st.form_submit_button("Login", disabled=(mode == "Public"))
-        public_button = st.form_submit_button("👥 Continue as Public User", disabled=(mode != "Public"))
+        public_button = st.form_submit_button("Continue as Public User", disabled=(mode != "Public"))
         
         if submit_button:
             if mode == "Admin":
-                if password == "admin123":
+                if st.session_state["admin_password"] == "admin123":
                     st.session_state["mode"] = "admin"
                     st.success("✅ Logged in as Admin!")
                     st.balloons()
@@ -151,14 +165,14 @@ def login_form():
                 else:
                     st.error("❌ Incorrect Admin password. Please try again.")
             elif mode == "Guest":
-                if password == "guest456" and username:
+                if st.session_state["guest_password"] == "guest456" and st.session_state["guest_username"]:
                     st.session_state["mode"] = "guest"
-                    st.session_state["username"] = username
-                    st.success(f"✅ Logged in as Guest ({username})!")
+                    st.session_state["username"] = st.session_state["guest_username"]
+                    st.success(f"✅ Logged in as Guest ({st.session_state['username']})!")
                     st.balloons()
                     time.sleep(0.5)
                     st.rerun()
-                elif not username:
+                elif not st.session_state["guest_username"]:
                     st.error("❌ Username is required for Guest mode.")
                 else:
                     st.error("❌ Incorrect Guest password. Please try again.")
@@ -175,7 +189,6 @@ def add_link_section(df, excel_file, mode):
     apply_css()
     st.markdown("<h3>🌐 Add New Link or Upload Bookmarks</h3>", unsafe_allow_html=True)
     
-    # Initialize user DataFrame for public mode with all required columns
     required_columns = [
         "link_id", "url", "title", "description", "tags",
         "created_at", "updated_at", "priority", "number", "is_duplicate"
@@ -183,10 +196,8 @@ def add_link_section(df, excel_file, mode):
     if mode == "public" and 'user_df' not in st.session_state:
         st.session_state['user_df'] = pd.DataFrame(columns=required_columns)
     
-    # Determine the DataFrame to use
     working_df = st.session_state['user_df'] if mode == "public" else df
     
-    # Ensure all required columns exist
     for col in required_columns:
         if col not in working_df.columns:
             if col == "tags":
@@ -203,15 +214,12 @@ def add_link_section(df, excel_file, mode):
     with tab1:
         st.markdown("<h4>Add Single URL</h4>", unsafe_allow_html=True)
         
-        # Dynamic key for url_input to force reset
         if 'url_input_counter' not in st.session_state:
             st.session_state['url_input_counter'] = 0
         url_input_key = f"url_input_{st.session_state['url_input_counter']}"
         
-        # Clear URL field if signaled
         url_value = '' if st.session_state.get('clear_url', False) else st.session_state.get(url_input_key, '')
         
-        # Fetch Metadata button
         url_temp = st.text_input(
             "URL*",
             value=url_value,
@@ -220,7 +228,6 @@ def add_link_section(df, excel_file, mode):
             help="Enter the full URL including https://"
         )
         
-        # Check for related URLs by domain
         prefilled_tags = []
         if url_temp and not working_df.empty and 'url' in working_df.columns:
             domain = get_domain(url_temp)
@@ -248,7 +255,6 @@ def add_link_section(df, excel_file, mode):
                 st.session_state['clear_url'] = False
                 st.info("✅ Metadata fetched! Fields updated.")
         
-        # Form for saving link
         with st.form("single_url_form", clear_on_submit=True):
             url = st.text_input(
                 "URL (Confirm)*",
@@ -272,7 +278,6 @@ def add_link_section(df, excel_file, mode):
                 key="description_input"
             )
             
-            # Get all unique tags from DataFrame with fallback
             all_tags = []
             if 'tags' in working_df.columns:
                 all_tags = sorted({str(tag).strip() for sublist in working_df['tags']
@@ -339,7 +344,7 @@ def add_link_section(df, excel_file, mode):
                                     st.session_state.pop(key, None)
                                 st.rerun()
                             else:
-                                st.error(f"❌ Failed to save link to Google Drive: {excel_file}")
+                                st.error(f"❌ Failed to save link to Google Drive: {excel_file}. Check secrets configuration.")
                                 logging.error(f"Failed to save to {excel_file}")
                         else:
                             st.session_state['user_df'] = new_df
@@ -388,7 +393,7 @@ def add_link_section(df, excel_file, mode):
                                 time.sleep(0.5)
                                 st.rerun()
                             else:
-                                st.error(f"❌ Failed to save bookmarks to Google Drive: {excel_file}")
+                                st.error(f"❌ Failed to save bookmarks to Google Drive: {excel_file}. Check secrets configuration.")
                                 logging.error(f"Failed to save bookmarks to {excel_file}")
                         else:
                             st.session_state['user_df'] = new_df
