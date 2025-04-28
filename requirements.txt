@@ -8,4 +8,4 @@ openpyxl==3.1.5
 scikit-learn==1.5.2
 newspaper3k==0.2.8
 spacy==3.7.6
-google-api-python-client
+google-api-python-client==2.149.0
