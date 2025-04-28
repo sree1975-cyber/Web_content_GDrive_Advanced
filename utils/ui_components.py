@@ -8,67 +8,71 @@ from io import BytesIO
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
 import time
+import uuid
 
-# CSS for responsive design and color schemes
-st.markdown("""
-<style>
-/* Base styles */
-.header-admin, .header-guest, .header-public {
-    padding: 1rem;
-    border-radius: 8px;
-    margin-bottom: 1rem;
-}
-.header-admin { background-color: #ADD8E6 !important; } /* Light blue for admin */
-.header-guest { background-color: #90EE90 !important; } /* Light parrot green for guest */
-.header-public { background-color: #D8BFD8 !important; } /* Light purple for public */
-.login-container {
-    background-color: #FFB6C1 !important; /* Light bluish-pink */
-    padding: 2rem;
-    border-radius: 8px;
-    text-align: center;
-}
-.button-tooltip {
-    position: relative;
-}
-.button-tooltip:hover::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    background-color: #333;
-    color: white;
-    padding: 0.5rem;
-    border-radius: 4px;
-    z-index: 10;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    white-space: nowrap;
-}
+def apply_css():
+    """Apply CSS for consistent color scheme across the app"""
+    css = """
+    <style>
+    /* Base styles */
+    .header-admin, .header-guest, .header-public {
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+    .header-admin { background-color: #ADD8E6 !important; } /* Light blue for admin */
+    .header-guest { background-color: #90EE90 !important; } /* Light parrot green for guest */
+    .header-public { background-color: #D8BFD8 !important; } /* Light purple for public */
+    .login-container {
+        background-color: #FFB6C1 !important; /* Light bluish-pink */
+        padding: 2rem;
+        border-radius: 8px;
+        text-align: center;
+    }
+    .button-tooltip {
+        position: relative;
+    }
+    .button-tooltip:hover::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        background-color: #333;
+        color: white;
+        padding: 0.5rem;
+        border-radius: 4px;
+        z-index: 10;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        white-space: nowrap;
+    }
 
-/* Responsive design */
-@media (max-width: 768px) {
-    .stForm, .stDataFrame {
-        font-size: 14px;
+    /* Responsive design */
+    @media (max-width: 768px) {
+        .stForm, .stDataFrame {
+            font-size: 14px;
+        }
+        .stButton > button {
+            width: 100%;
+            margin-bottom: 0.5rem;
+        }
+        .stDataFrame {
+            overflow-x: auto;
+        }
     }
-    .stButton > button {
-        width: 100%;
-        margin-bottom: 0.5rem;
-    }
-    .stDataFrame {
-        overflow-x: auto;
-    }
-}
 
-/* Debug CSS application */
-.debug-css::after {
-    content: "CSS Loaded";
-    display: none;
-}
-</style>
-<div class="debug-css"></div>
-""", unsafe_allow_html=True)
+    /* Debug CSS application */
+    .debug-css::after {
+        content: "CSS Loaded";
+        display: none;
+    }
+    </style>
+    <div class="debug-css"></div>
+    """
+    st.markdown(css, unsafe_allow_html=True)
 
 def display_header(mode, username=None):
     """Display the app header with mode-specific styling and logout button"""
+    apply_css()  # Ensure CSS is applied
     header_class = f"header-{mode}"
     st.markdown(f"""
     <div class="{header_class}">
@@ -82,10 +86,13 @@ def display_header(mode, username=None):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.success("✅ Logged out successfully!")
+        st.snow()
+        time.sleep(2)
         st.rerun()
 
 def login_form():
     """Display login form for Admin, Guest, or Public access"""
+    apply_css()  # Ensure CSS is applied
     st.markdown("""
     <div class="login-container">
         <h2 class="login-title">Welcome to Web Content Manager</h2>
@@ -113,6 +120,7 @@ def login_form():
                     st.session_state["mode"] = "admin"
                     st.success("✅ Logged in as Admin!")
                     st.balloons()
+                    time.sleep(0.5)
                     st.rerun()
                 else:
                     st.error("❌ Incorrect Admin password. Please try again.")
@@ -122,6 +130,7 @@ def login_form():
                     st.session_state["username"] = username
                     st.success(f"✅ Logged in as Guest ({username})!")
                     st.balloons()
+                    time.sleep(0.5)
                     st.rerun()
                 elif not username:
                     st.error("❌ Username is required for Guest mode.")
@@ -132,21 +141,36 @@ def login_form():
             st.session_state["mode"] = "public"
             st.success("✅ Continuing as Public User!")
             st.balloons()
+            time.sleep(0.5)
             st.rerun()
 
 def add_link_section(df, excel_file, mode):
     """Section for adding new links or uploading bookmark files"""
+    apply_css()  # Ensure CSS is applied
     st.markdown("<h3>🌐 Add New Link or Upload Bookmarks</h3>", unsafe_allow_html=True)
     
-    # Initialize user DataFrame for public mode
+    # Initialize user DataFrame for public mode with all required columns
+    required_columns = [
+        "link_id", "url", "title", "description", "tags",
+        "created_at", "updated_at", "priority", "number", "is_duplicate"
+    ]
     if mode == "public" and 'user_df' not in st.session_state:
-        st.session_state['user_df'] = pd.DataFrame(columns=[
-            'link_id', 'url', 'title', 'description', 'tags', 
-            'created_at', 'updated_at', 'priority', 'number', 'is_duplicate'
-        ])
+        st.session_state['user_df'] = pd.DataFrame(columns=required_columns)
     
     # Determine the DataFrame to use
     working_df = st.session_state['user_df'] if mode == "public" else df
+    
+    # Ensure all required columns exist
+    for col in required_columns:
+        if col not in working_df.columns:
+            if col == "tags":
+                working_df[col] = [[]] * len(working_df)
+            elif col == "is_duplicate":
+                working_df[col] = False
+            elif col == "link_id":
+                working_df[col] = [str(uuid.uuid4()) for _ in range(len(working_df))]
+            else:
+                working_df[col] = ""
     
     tab1, tab2 = st.tabs(["Single URL", "Upload Bookmarks"])
     
@@ -205,10 +229,12 @@ def add_link_section(df, excel_file, mode):
                 key="description_input"
             )
             
-            # Get all unique tags from DataFrame
-            all_tags = sorted({str(tag).strip() for sublist in working_df['tags'] 
-                             for tag in (sublist if isinstance(sublist, list) else str(sublist).split(',')) 
-                             if str(tag).strip()})
+            # Get all unique tags from DataFrame with fallback
+            all_tags = []
+            if 'tags' in working_df.columns:
+                all_tags = sorted({str(tag).strip() for sublist in working_df['tags']
+                                 for tag in (sublist if isinstance(sublist, list) else str(sublist).split(',')) 
+                                 if str(tag).strip()})
             suggested_tags = st.session_state.get('suggested_tags', []) + \
                            ['News', 'Shopping', 'Research', 'Entertainment', 'Cloud', 'Education', 'Other']
             all_tags = sorted(list(set(all_tags + [str(tag).strip() for tag in suggested_tags if str(tag).strip()])))
@@ -245,7 +271,8 @@ def add_link_section(df, excel_file, mode):
                 key="number_input"
             )
             
-            submitted = st.form_submit_button("💾 Save Link")
+            # Ensure submit button is present
+            submitted = st.form_submit_button("💾 Save Link", help="Save the link to your collection")
             
             if submitted:
                 logging.debug(f"Form submitted: URL={url}, Title={title}, Description={description}, Tags={tags}, Priority={priority}, Number={number}, Mode={mode}")
@@ -301,7 +328,9 @@ def add_link_section(df, excel_file, mode):
                 key="duplicate_action"
             )
             
-            if st.form_submit_button("Import Bookmarks", help="Import bookmarks from file"):
+            submitted = st.form_submit_button("Import Bookmarks", help="Import bookmarks from file")
+            
+            if submitted:
                 if uploaded_file:
                     try:
                         progress_bar = st.progress(0)
@@ -313,6 +342,8 @@ def add_link_section(df, excel_file, mode):
                                 if new_df["is_duplicate"].any():
                                     st.warning("⚠️ Some URLs are duplicates.")
                                 st.balloons()
+                                time.sleep(0.5)
+                                st.rerun()
                             else:
                                 st.error("❌ Failed to save bookmarks to Google Drive")
                         else:
@@ -321,6 +352,8 @@ def add_link_section(df, excel_file, mode):
                             if new_df["is_duplicate"].any():
                                 st.warning("⚠️ Some URLs are duplicates.")
                             st.balloons()
+                            time.sleep(0.5)
+                            st.rerun()
                         return new_df
                     except Exception as e:
                         st.error(f"❌ Failed to process bookmark file: {str(e)}")
@@ -334,6 +367,7 @@ def add_link_section(df, excel_file, mode):
 
 def browse_section(df, excel_file, mode):
     """Section to browse, search, and delete links"""
+    apply_css()  # Ensure CSS is applied
     st.markdown("<h3>Browse Links</h3>", unsafe_allow_html=True)
     
     if mode == "public":
@@ -346,14 +380,16 @@ def browse_section(df, excel_file, mode):
     for col in required_columns:
         if col not in df.columns:
             if col == "tags":
-                df[col] = ""
+                df[col] = [[]] * len(df)
             elif col == "is_duplicate":
                 df[col] = False
+            elif col == "link_id":
+                df[col] = [str(uuid.uuid4()) for _ in range(len(df))]
             else:
                 df[col] = ""
     
     search_query = st.text_input("Search Links", placeholder="Enter keywords or tags...")
-    tag_options = sorted(set(','.join(df["tags"].dropna().astype(str)).split(','))) if not df.empty and "tags" in df.columns else []
+    tag_options = sorted(set(','.join([','.join(x) if isinstance(x, list) else str(x) for x in df["tags"].dropna()]).split(','))) if not df.empty and "tags" in df.columns else []
     tag_filter = st.multiselect("Filter by Tags", options=tag_options)
     
     filtered_df = df.copy()
@@ -362,10 +398,10 @@ def browse_section(df, excel_file, mode):
             filtered_df["title"].str.contains(search_query, case=False, na=False) |
             filtered_df["description"].str.contains(search_query, case=False, na=False) |
             filtered_df["url"].str.contains(search_query, case=False, na=False) |
-            filtered_df["tags"].str.contains(search_query, case=False, na=False)
+            filtered_df["tags"].apply(lambda x: search_query.lower() in ','.join(x).lower() if isinstance(x, list) else search_query.lower() in str(x).lower())
         ]
     if tag_filter:
-        filtered_df = filtered_df[filtered_df["tags"].apply(lambda x: any(tag in str(x).split(',') for tag in tag_filter))]
+        filtered_df = filtered_df[filtered_df["tags"].apply(lambda x: any(tag in (x if isinstance(x, list) else str(x).split(',')) for tag in tag_filter))]
     
     priority_order = {"Important": 0, "High": 1, "Medium": 2, "Low": 3}
     if not filtered_df.empty:
@@ -424,6 +460,7 @@ def browse_section(df, excel_file, mode):
 
 def download_section(df, excel_file, mode):
     """Section to download links as Excel with hyperlinked URLs"""
+    apply_css()  # Ensure CSS is applied
     st.markdown("<h3>Export Data</h3>", unsafe_allow_html=True)
     
     if mode == "public":
@@ -438,7 +475,7 @@ def download_section(df, excel_file, mode):
         output["url"] = df_to_export["url"]
         output["title"] = df_to_export["title"]
         output["description"] = df_to_export["description"]
-        output["tags"] = df_to_export["tags"].astype(str)
+        output["tags"] = df_to_export["tags"].apply(lambda x: ','.join(x) if isinstance(x, list) else str(x))
         output["priority"] = df_to_export["priority"]
         output["number"] = df_to_export["number"]
         output["created_at"] = df_to_export["created_at"]
@@ -469,6 +506,7 @@ def download_section(df, excel_file, mode):
 
 def analytics_section(df):
     """Admin-only analytics tab"""
+    apply_css()  # Ensure CSS is applied
     st.markdown("<h3>Analytics</h3>", unsafe_allow_html=True)
     
     if df.empty:
