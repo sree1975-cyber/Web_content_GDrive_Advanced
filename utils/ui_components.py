@@ -385,7 +385,7 @@ def browse_section(df, excel_file, mode):
         df = st.session_state.get("user_df", pd.DataFrame(columns=[
             "link_id", "url", "title", "description", "tags", 
             "created_at", "updated_at", "priority", "number", "is_duplicate"
-        ] qualitative feedback on the implementation and potential improvements.
+        ]))
     
     required_columns = ["link_id", "url", "title", "description", "tags", "created_at", "updated_at", "priority", "number", "is_duplicate"]
     for col in required_columns:
