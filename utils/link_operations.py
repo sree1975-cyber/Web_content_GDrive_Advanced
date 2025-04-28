@@ -37,12 +37,15 @@ def save_link(df, url, title, description, tags, priority, number, mode):
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         is_duplicate = url in df['url'].values if not df.empty else False
         
+        # Convert tags list to single string for consistency
+        tags_str = tags[0] if tags and isinstance(tags, list) else tags if isinstance(tags, str) else ''
+        
         new_row = pd.DataFrame([{
             'link_id': new_id,
             'url': url,
             'title': title or '',
             'description': description or '',
-            'tags': tags,
+            'tags': tags_str,
             'created_at': now,
             'updated_at': now,
             'priority': priority,
