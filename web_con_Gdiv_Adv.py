@@ -1,98 +1,88 @@
 import streamlit as st
 import pandas as pd
-from utils.data_manager import load_data
 from utils.ui_components import display_header, login_form, add_link_section, browse_section, download_section, analytics_section
+from utils.data_manager import load_data, save_data
 import logging
+import os
 
-# Set up logging
-logging.basicConfig(level=logging.DEBUG)
-
-# Set page configuration
-st.set_page_config(page_title="Web Content Manager", layout="wide")
-
-# Initialize session state
-if "mode" not in st.session_state:
-    st.session_state["mode"] = None
-if "username" not in st.session_state:
-    st.session_state["username"] = None
-if "df" not in st.session_state:
-    st.session_state["df"] = None
-if "user_df" not in st.session_state:
-    st.session_state["user_df"] = None
+# Configure logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def main():
-    # Load secrets
-    secrets = st.secrets.get("gdrive", {})
-    folder_id = secrets.get("folder_id", "")
+    """Main function to run the Web Content Manager app"""
+    # Define required columns
+    required_columns = [
+        "link_id", "url", "title", "description", "tags",
+        "created_at", "updated_at", "priority", "number", "is_duplicate"
+    ]
     
-    # Determine Excel file based on mode and username
-    if st.session_state["mode"] == "guest" and st.session_state["username"]:
-        excel_file = f"links_{st.session_state['username']}.xlsx"
-        logging.debug(f"Guest mode: Using Excel file {excel_file} for user {st.session_state['username']}")
-    elif st.session_state["mode"] == "admin":
-        excel_file = "links.xlsx"
-        logging.debug("Admin mode: Using Excel file links.xlsx")
-    else:
-        excel_file = None
-        logging.debug("Public mode: No Excel file used")
+    # Initialize session state
+    if "mode" not in st.session_state:
+        st.session_state["mode"] = None
+    if "username" not in st.session_state:
+        st.session_state["username"] = None
+    if "df" not in st.session_state:
+        st.session_state["df"] = pd.DataFrame(columns=required_columns)
+    if "user_df" not in st.session_state:
+        st.session_state["user_df"] = pd.DataFrame(columns=required_columns)
     
-    # Load data for admin or guest
-    if excel_file and st.session_state["mode"] in ["admin", "guest"]:
-        try:
-            df = load_data(excel_file, folder_id)
-            if df is not None:
-                st.session_state["df"] = df
-                logging.debug(f"Data loaded successfully for {st.session_state['mode']}: {len(df)} rows")
-            else:
-                st.session_state["df"] = pd.DataFrame(columns=[
-                    "link_id", "url", "title", "description", "tags",
-                    "created_at", "updated_at", "priority", "number", "is_duplicate"
-                ])
-                logging.debug(f"Initialized empty DataFrame for {st.session_state['mode']}")
-        except Exception as e:
-            st.error(f"❌ Failed to load data: {str(e)}")
-            logging.error(f"Failed to load data: {str(e)}")
-            st.session_state["df"] = pd.DataFrame(columns=[
-                "link_id", "url", "title", "description", "tags",
-                "created_at", "updated_at", "priority", "number", "is_duplicate"
-            ])
-    
-    # Display UI based on mode
-    if not st.session_state["mode"]:
+    # Display login form if not logged in
+    if st.session_state["mode"] is None:
         login_form()
+        return
+    
+    # Get mode and username
+    mode = st.session_state["mode"]
+    username = st.session_state.get("username", None)
+    
+    # Display header
+    display_header(mode, username)
+    
+    # Initialize DataFrame based on mode
+    if mode == "public":
+        user_df = st.session_state["user_df"]
+        excel_file = None
+        logging.debug("Public mode: Using user_df from session state")
     else:
-        mode = st.session_state["mode"]
-        username = st.session_state["username"]
-        display_header(mode, username)
+        # Determine Excel file based on mode and username
+        excel_file = f"links_{username}.xlsx" if mode == "guest" and username else "links.xlsx"
+        folder_id = st.secrets["gdrive"].get("folder_id", "") if "gdrive" in st.secrets else ""
         
-        if mode in ["admin", "guest"]:
-            df = st.session_state.get("df", pd.DataFrame())
-            if mode == "admin":
-                tab1, tab2, tab3, tab4 = st.tabs(["Add Link", "Browse Links", "Export Data", "Analytics"])
-                with tab4:
-                    analytics_section(df)
+        # Load data from Google Drive
+        user_df = load_data(excel_file, folder_id)
+        if user_df is None or not isinstance(user_df, pd.DataFrame):
+            logging.warning(f"Failed to load {excel_file} or invalid DataFrame. Initializing empty DataFrame.")
+            user_df = pd.DataFrame(columns=required_columns)
+        st.session_state["df"] = user_df
+        logging.debug(f"Loaded {excel_file}: {len(user_df)} rows")
+    
+    # Log user_df state
+    logging.debug(f"main: mode={mode}, user_df type={type(user_df)}, columns={user_df.columns.tolist() if isinstance(user_df, pd.DataFrame) else None}")
+    
+    # Create tabs for different sections
+    tabs = ["Add Link", "Browse Links", "Export Data"]
+    if mode == "admin":
+        tabs.append("Analytics")
+    
+    tab_objects = st.tabs(tabs)
+    
+    with tab_objects[0]:
+        new_df = add_link_section(user_df, excel_file, mode)
+        if new_df is not None and isinstance(new_df, pd.DataFrame):
+            if mode == "public":
+                st.session_state["user_df"] = new_df
             else:
-                tab1, tab2, tab3 = st.tabs(["Add Link", "Browse Links", "Export Data"])
-            
-            with tab1:
-                new_df = add_link_section(df, excel_file, mode)
-                if new_df is not None and mode == "guest":
-                    st.session_state["df"] = new_df
-            with tab2:
-                browse_section(df, excel_file, mode)
-            with tab3:
-                download_section(df, excel_file, mode)
-        else:
-            tab1, tab2, tab3 = st.tabs(["Add Link", "Browse Links", "Export Data"])
-            with tab1:
-                user_df = st.session_state.get("user_df", pd.DataFrame())
-                new_df = add_link_section(user_df, None, mode)
-                if new_df is not None:
-                    st.session_state["user_df"] = new_df
-            with tab2:
-                browse_section(None, None, mode)
-            with tab3:
-                download_section(None, None, mode)
+                st.session_state["df"] = new_df
+    
+    with tab_objects[1]:
+        browse_section(user_df, excel_file, mode)
+    
+    with tab_objects[2]:
+        download_section(user_df, excel_file, mode)
+    
+    if mode == "admin" and len(tab_objects) > 3:
+        with tab_objects[3]:
+            analytics_section(user_df)
 
 if __name__ == "__main__":
     main()
