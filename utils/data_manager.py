@@ -6,10 +6,17 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import logging
 import os
+import json
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def get_drive_service():
-    """Initialize Google Drive API service"""
+    """Initialize Google Drive API service with detailed logging"""
     try:
+        # Log available secrets
+        logging.debug(f"Available secrets: {list(st.secrets.keys())}")
+        
         if "gdrive" not in st.secrets:
             logging.error("No 'gdrive' section found in secrets.toml")
             st.error("❌ Google Drive configuration is missing. Add [gdrive] section to secrets.toml in Streamlit Cloud settings with service account credentials and folder_id.")
@@ -18,15 +25,31 @@ def get_drive_service():
         creds_dict = st.secrets["gdrive"]
         logging.debug(f"Loaded gdrive secrets: keys={list(creds_dict.keys())}")
         
-        required_keys = ["type", "project_id", "private_key_id", "private_key", "client_email", "client_id", "auth_uri", "token_uri", "auth_provider_x509_cert_url", "client_x509_cert_url", "folder_id"]
+        # Validate required keys
+        required_keys = [
+            "type", "project_id", "private_key_id", "private_key", "client_email",
+            "client_id", "auth_uri", "token_uri", "auth_provider_x509_cert_url",
+            "client_x509_cert_url", "folder_id"
+        ]
         missing_keys = [key for key in required_keys if key not in creds_dict]
         if missing_keys:
             logging.error(f"Missing keys in gdrive secrets: {missing_keys}")
             st.error(f"❌ Incomplete Google Drive configuration. Missing keys: {missing_keys}. Update secrets.toml in Streamlit Cloud settings.")
             return None
         
+        # Validate private_key format
+        if not creds_dict["private_key"].startswith("-----BEGIN PRIVATE KEY-----"):
+            logging.error("Invalid private_key format: Does not start with '-----BEGIN PRIVATE KEY-----'")
+            st.error("❌ Invalid private_key in Google Drive configuration. Ensure it starts with '-----BEGIN PRIVATE KEY-----' and ends with '-----END PRIVATE KEY-----'.")
+            return None
+        
+        # Log first few characters of sensitive fields for verification
+        logging.debug(f"project_id: {creds_dict['project_id'][:10]}...")
+        logging.debug(f"client_email: {creds_dict['client_email'][:20]}...")
+        logging.debug(f"folder_id: {creds_dict['folder_id']}")
+        
         creds = ServiceAccountCredentials.from_json_keyfile_dict(
-            creds_dict, 
+            creds_dict,
             scopes=[
                 'https://www.googleapis.com/auth/drive',
                 'https://spreadsheets.google.com/feeds'
@@ -60,15 +83,27 @@ def get_file_id(drive_service, file_name, folder_id):
         return None
 
 def load_data(file_name, folder_id):
-    """Load data from an Excel file in Google Drive"""
+    """Load data from an Excel file in Google Drive or local fallback"""
     drive_service = get_drive_service()
     if not drive_service:
-        logging.error(f"Cannot load data for {file_name}: No drive service")
+        # Fallback to local storage
+        local_path = f"/tmp/{file_name}"
+        if os.path.exists(local_path):
+            try:
+                df = pd.read_excel(local_path)
+                if 'tags' in df.columns:
+                    df['tags'] = df['tags'].apply(lambda x: x.split(',') if isinstance(x, str) else x)
+                logging.debug(f"Loaded data from local {local_path}: {len(df)} rows")
+                return df
+            except Exception as e:
+                logging.error(f"Failed to load local data from {local_path}: {str(e)}")
+                return None
+        logging.debug(f"No local file {local_path}, returning None")
         return None
     
     file_id = get_file_id(drive_service, file_name, folder_id)
     if not file_id:
-        logging.debug(f"No existing file {file_name}, returning empty DataFrame")
+        logging.debug(f"No existing file {file_name} in Google Drive, returning None")
         return None
     
     try:
@@ -78,23 +113,19 @@ def load_data(file_name, folder_id):
             f.write(request.execute())
         
         df = pd.read_excel(file_path)
-        
         if 'tags' in df.columns:
             df['tags'] = df['tags'].apply(lambda x: x.split(',') if isinstance(x, str) else x)
         
         os.remove(file_path)
-        logging.debug(f"Loaded data from {file_name}: {len(df)} rows")
+        logging.debug(f"Loaded data from Google Drive {file_name}: {len(df)} rows")
         return df
     except Exception as e:
-        logging.error(f"Failed to load data from {file_name}: {str(e)}")
+        logging.error(f"Failed to load data from Google Drive {file_name}: {str(e)}")
         return None
 
 def save_data(df, file_name):
-    """Save DataFrame to an Excel file in Google Drive"""
+    """Save DataFrame to an Excel file in Google Drive or local fallback"""
     drive_service = get_drive_service()
-    if not drive_service:
-        logging.error(f"Cannot save data to {file_name}: No drive service")
-        return False
     
     try:
         temp_file = f"/tmp/{file_name}"
@@ -102,6 +133,12 @@ def save_data(df, file_name):
         if 'tags' in output_df.columns:
             output_df['tags'] = output_df['tags'].apply(lambda x: ','.join(x) if isinstance(x, list) else x)
         output_df.to_excel(temp_file, index=False)
+        
+        if not drive_service:
+            # Fallback to local storage
+            logging.warning(f"Google Drive unavailable, saving to local {temp_file}")
+            st.warning(f"⚠️ Google Drive unavailable. Saving to local storage ({file_name}). Download the file as it’s temporary.")
+            return True
         
         folder_id = st.secrets["gdrive"].get("folder_id", "")
         if not folder_id:
@@ -117,7 +154,7 @@ def save_data(df, file_name):
                 fileId=file_id,
                 media_body=media
             ).execute()
-            logging.debug(f"Updated file {file_name} with ID {file_id}")
+            logging.debug(f"Updated file {file_name} with ID {file_id} in Google Drive")
         else:
             file_metadata = {
                 'name': file_name,
@@ -130,11 +167,14 @@ def save_data(df, file_name):
                 fields='id'
             ).execute()
             file_id = file.get('id')
-            logging.debug(f"Created new file {file_name} with ID {file_id}")
+            logging.debug(f"Created new file {file_name} with ID {file_id} in Google Drive")
         
         os.remove(temp_file)
         logging.debug(f"Successfully saved {file_name} to Google Drive")
         return True
     except Exception as e:
         logging.error(f"Failed to save data to {file_name}: {str(e)}")
-        return False
+        # Fallback to local storage
+        logging.warning(f"Google Drive save failed, saving to local {temp_file}")
+        st.warning(f"⚠️ Failed to save to Google Drive. Saving to local storage ({file_name}). Download the file as it’s temporary.")
+        return True
