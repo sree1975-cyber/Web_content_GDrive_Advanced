@@ -74,6 +74,9 @@ def display_header(mode, username=None):
     """Display the app header with mode-specific styling and logout button"""
     apply_css()  # Ensure CSS is applied
     header_class = f"header-{mode}"
+    # Fallback to session state if username is None
+    if username is None:
+        username = st.session_state.get("username")
     logging.debug(f"Displaying header: mode={mode}, username={username}")
     st.markdown(f"""
     <div class="{header_class}">
@@ -130,6 +133,7 @@ def login_form():
                 if password == "guest456" and username:
                     st.session_state["mode"] = "guest"
                     st.session_state["username"] = username
+                    logging.debug(f"Guest login: username={username}, session_state_username={st.session_state['username']}")
                     st.success(f"✅ Logged in as Guest ({username})!")
                     st.balloons()
                     time.sleep(0.5)
