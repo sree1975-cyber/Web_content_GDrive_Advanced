@@ -8,6 +8,31 @@ from sklearn.linear_model import LogisticRegression
 import requests
 from bs4 import BeautifulSoup
 
+# Check for newspaper3k availability
+try:
+    from newspaper import Article
+    NEWSPAPER_AVAILABLE = True
+except ImportError:
+    NEWSPAPER_AVAILABLE = False
+    logging.warning("newspaper3k not available, using BeautifulSoup fallback")
+
+# Lazy-load spaCy and classifier
+NLP = None
+VECTORIZER = None
+CLASSIFIER = None
+
+def init_nlp():
+    """Initialize spaCy model"""
+    global NLP
+    if NLP is None:
+        try:
+            import spacy
+            NLP = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+        except Exception as e:
+            logging.error(f"Failed to load spaCy model: {str(e)}")
+            NLP = False
+    return NLP
+
 # Hardcoded labeled dataset for training
 TRAINING_DATA = [
     {"text": "CNN Breaking News Article", "url": "https://cnn.com", "tag": "News"},
@@ -19,30 +44,38 @@ TRAINING_DATA = [
     {"text": "Random Blog Post", "url": "https://example.com", "tag": "Other"},
 ]
 
-# Train simple classifier
 def train_classifier():
-    texts = [item["text"] for item in TRAINING_DATA]
-    tags = [item["tag"] for item in TRAINING_DATA]
-    vectorizer = TfidfVectorizer(max_features=1000, stop_words="english")
-    X = vectorizer.fit_transform(texts)
-    clf = LogisticRegression(random_state=42)
-    clf.fit(X, tags)
-    return vectorizer, clf
-
-VECTORIZER, CLASSIFIER = train_classifier()
+    """Train classifier lazily"""
+    global VECTORIZER, CLASSIFIER
+    if VECTORIZER is None or CLASSIFIER is None:
+        texts = [item["text"] for item in TRAINING_DATA]
+        tags = [item["tag"] for item in TRAINING_DATA]
+        VECTORIZER = TfidfVectorizer(max_features=1000, stop_words="english")
+        X = VECTORIZER.fit_transform(texts)
+        CLASSIFIER = LogisticRegression(random_state=42)
+        CLASSIFIER.fit(X, tags)
+    return VECTORIZER, CLASSIFIER
 
 @st.cache_data
 def fetch_metadata(url):
-    """Fetch metadata for a given URL using BeautifulSoup, with caching"""
+    """Fetch metadata for a given URL, with caching"""
     try:
-        response = requests.get(url, timeout=5)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
-        title = soup.find("title").text if soup.find("title") else ""
-        description = ""
-        meta_desc = soup.find("meta", attrs={"name": "description"})
-        if meta_desc and meta_desc.get("content"):
-            description = meta_desc["content"]
+        if NEWSPAPER_AVAILABLE:
+            article = Article(url)
+            article.download()
+            article.parse()
+            title = article.title or ""
+            description = article.meta_description or article.text[:200] or ""
+        else:
+            # Fallback to BeautifulSoup
+            response = requests.get(url, timeout=5)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "html.parser")
+            title = soup.find("title").text if soup.find("title") else ""
+            description = ""
+            meta_desc = soup.find("meta", attrs={"name": "description"})
+            if meta_desc and meta_desc.get("content"):
+                description = meta_desc["content"]
         return {"title": title, "description": description}
     except Exception as e:
         logging.error(f"Metadata fetch failed for {url}: {str(e)}")
@@ -95,17 +128,26 @@ def predict_tag(text, url):
     """Predict a single tag using classifier or rule-based fallback"""
     categories = ["News", "Shopping", "Research", "Entertainment", "Cloud", "Education", "Other"]
     
+    # Preprocess text with spaCy or fallback to raw text
+    nlp = init_nlp()
+    if nlp:
+        doc = nlp(text)
+        processed_text = " ".join([token.lemma_ for token in doc if not token.is_stop])
+    else:
+        processed_text = text
+    
     try:
         # Use classifier
-        X = VECTORIZER.transform([text])
-        tag = CLASSIFIER.predict(X)[0]
+        vectorizer, classifier = train_classifier()
+        X = vectorizer.transform([processed_text])
+        tag = classifier.predict(X)[0]
         if tag in categories:
             return tag
     except Exception as e:
         logging.error(f"Classifier prediction failed: {str(e)}")
     
     # Fallback: Rule-based tagging
-    text_lower = text.lower()
+    text_lower = processed_text.lower()
     url_lower = url.lower()
     rules = {
         "News": ["news", "article", "cnn", "bbc", "nytimes", "guardian"],
