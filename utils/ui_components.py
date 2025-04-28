@@ -152,7 +152,7 @@ def login_form():
     # Submission form
     with st.form(key="login_submit_form", clear_on_submit=False):
         submit_button = st.form_submit_button("Login", disabled=(mode == "Public"))
-        public_button = st.form_submit_button("Continue as Public User", disabled=(mode != "Public"))
+        public_button = st.form_submit_button("👥 Continue as Public User", disabled=(mode != "Public"))
         
         if submit_button:
             if mode == "Admin":
