@@ -34,7 +34,7 @@ def main():
         login_form()
         return
     
-    display_header(mode, username)
+    display_header(mode)
     
     # Set Excel file based on mode and username
     if mode == "admin":
