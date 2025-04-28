@@ -289,6 +289,19 @@ def main():
                 'link_id', 'url', 'title', 'description', 'tags', 
                 'created_at', 'updated_at', 'priority', 'number', 'is_duplicate'
             ])
+            # Ensure tags is a string, not a list
+            st.session_state['user_df']['tags'] = st.session_state['user_df']['tags'].apply(lambda x: '' if pd.isna(x) else str(x))
+    
+    # Ensure all required columns exist
+    required_columns = ['link_id', 'url', 'title', 'description', 'tags', 'created_at', 'updated_at', 'priority', 'number', 'is_duplicate']
+    for col in required_columns:
+        if col not in df.columns:
+            if col == 'tags':
+                df[col] = ''
+            elif col == 'is_duplicate':
+                df[col] = False
+            else:
+                df[col] = ''
     
     # Display header with mode-specific styling
     display_header(mode, username)
