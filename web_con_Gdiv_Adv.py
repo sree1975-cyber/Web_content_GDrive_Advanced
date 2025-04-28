@@ -3,23 +3,23 @@ from streamlit_option_menu import option_menu
 import pandas as pd
 from utils.data_manager import init_data, save_data
 from utils.ui_components import display_header, login_form, add_link_section, browse_section, download_section
-from utils.link_operations import save_link, delete_selected_links, fetch_metadata
+from utils.link_operations import save_link, delete_selected_links, fetch_metadata, process_bookmark_file
 import logging
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 
-# Verify Streamlit version
-if st.__version__ != "1.31.0":
-    st.error(f"Streamlit version {st.__version__} detected. This app requires 1.31.0. Check Cloud logs or contact support.")
-
-# Set page configuration
+# Set page configuration (must be the first Streamlit command)
 st.set_page_config(
     page_title="Web Content Manager",
     page_icon="🔖",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Check Streamlit version (optional warning, does not block execution)
+if st.__version__ != "1.31.0":
+    logging.warning(f"Streamlit version {st.__version__} detected. The app was tested with 1.31.0, but should work with {st.__version__}.")
 
 # Custom CSS
 st.markdown("""
