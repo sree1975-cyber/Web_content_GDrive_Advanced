@@ -61,7 +61,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def display_header(mode, username=None):
-    """Display the app header with mode-specific styling"""
+    """Display the app header with mode-specific styling and logout button"""
     header_class = f"header-{mode}"
     st.markdown(f"""
     <div class='{header_class}'>
@@ -70,6 +70,13 @@ def display_header(mode, username=None):
         <p style='margin: 0.5rem 0 0;'>{mode.capitalize()} Mode{f' ({username})' if username else ''}</p>
     </div>
     """, unsafe_allow_html=True)
+    
+    if st.button("🚪 Logout", help="Log out and return to login screen"):
+        # Clear session state
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.success("✅ Logged out successfully!")
+        st.rerun()
 
 def login_form():
     """Display login form for Admin, Guest, or Public access"""
