@@ -70,10 +70,11 @@ def apply_css():
     """
     st.markdown(css, unsafe_allow_html=True)
 
-def display_header(mode, username=None):
+def display_header(mode):
     """Display the app header with mode-specific styling and logout button"""
     apply_css()  # Ensure CSS is applied
     header_class = f"header-{mode}"
+    username = st.session_state.get("username")
     logging.debug(f"Displaying header: mode={mode}, username={username}")
     st.markdown(f"""
     <div class="{header_class}">
@@ -101,35 +102,56 @@ def login_form():
     </div>
     """, unsafe_allow_html=True)
     
-    with st.form(key="login_form", clear_on_submit=False):
-        mode = st.radio("Select Login Type", ["Admin", "Guest", "Public"], index=0)
-        
-        if mode == "Admin":
+    # Initialize login mode in session state
+    if "login_mode" not in st.session_state:
+        st.session_state["login_mode"] = "Admin"
+    
+    # Radio button outside form for dynamic updates
+    mode = st.radio(
+        "Select Login Type",
+        ["Admin", "Guest", "Public"],
+        index=["Admin", "Guest", "Public"].index(st.session_state["login_mode"]),
+        key="login_mode_radio"
+    )
+    
+    # Update session state when mode changes
+    if mode != st.session_state["login_mode"]:
+        st.session_state["login_mode"] = mode
+        # Clear previous form inputs to avoid stale data
+        for key in ["admin_password", "guest_username", "guest_password"]:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.rerun()
+    
+    # Render appropriate form or button based on mode
+    if mode == "Admin":
+        with st.form(key="admin_login_form", clear_on_submit=False):
             password = st.text_input("Admin Password", type="password", key="admin_password")
-        elif mode == "Guest":
-            username = st.text_input("Username", key="guest_username")
-            password = st.text_input("Guest Password", type="password", key="guest_password")
-        else:
-            st.info("Click 'Continue as Public User' to access the app without saving to Google Drive.")
-        
-        submit_button = st.form_submit_button("Login", disabled=(mode == "Public"))
-        public_button = st.form_submit_button("👥 Continue as Public User", disabled=(mode != "Public"))
-        
-        if submit_button:
-            if mode == "Admin":
+            submit_button = st.form_submit_button("Login")
+            
+            if submit_button:
                 if password == "admin123":
                     st.session_state["mode"] = "admin"
                     st.session_state["username"] = None
+                    logging.debug("Admin login successful")
                     st.success("✅ Logged in as Admin!")
                     st.balloons()
                     time.sleep(0.5)
                     st.rerun()
                 else:
                     st.error("❌ Incorrect Admin password. Please try again.")
-            elif mode == "Guest":
+    
+    elif mode == "Guest":
+        with st.form(key="guest_login_form", clear_on_submit=False):
+            username = st.text_input("Username", key="guest_username")
+            password = st.text_input("Guest Password", type="password", key="guest_password")
+            submit_button = st.form_submit_button("Login")
+            
+            if submit_button:
                 if password == "guest456" and username:
                     st.session_state["mode"] = "guest"
                     st.session_state["username"] = username
+                    logging.debug(f"Guest login: username={username}, session_state_username={st.session_state['username']}")
                     st.success(f"✅ Logged in as Guest ({username})!")
                     st.balloons()
                     time.sleep(0.5)
@@ -138,11 +160,13 @@ def login_form():
                     st.error("❌ Username is required for Guest mode.")
                 else:
                     st.error("❌ Incorrect Guest password. Please try again.")
-        
-        if public_button and mode == "Public":
+    
+    else:  # Public mode
+        if st.button("👥 Continue as Public User"):
             st.session_state["mode"] = "public"
             st.session_state["username"] = None
-            st.success("✅ Continuing as Public User!")
+            logging.debug("Public login successful")
+            st.success("✅ Continuing as Public User!”)
             st.balloons()
             time.sleep(0.5)
             st.rerun()
