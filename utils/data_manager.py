@@ -12,13 +12,20 @@ import json
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def get_drive_service():
-    """Initialize Google Drive API service with detailed logging"""
+    """Initialize Google Drive API service with forced secrets logging"""
     try:
-        # Log available secrets
-        logging.debug(f"Available secrets: {list(st.secrets.keys())}")
+        # Force-log secrets state
+        secrets_keys = list(st.secrets.keys())
+        logging.debug(f"Available secrets keys: {secrets_keys}")
+        logging.debug(f"Full secrets content (partial): {dict(st.secrets) if secrets_keys else 'Empty'}")
+        
+        if not secrets_keys:
+            logging.error("No secrets loaded in st.secrets. Check Streamlit Cloud secrets configuration.")
+            st.error("❌ No secrets loaded. Ensure secrets.toml is configured in Streamlit Cloud settings.")
+            return None
         
         if "gdrive" not in st.secrets:
-            logging.error("No 'gdrive' section found in secrets.toml")
+            logging.error("No 'gdrive' section found in secrets.toml. Expected [gdrive] section.")
             st.error("❌ Google Drive configuration is missing. Add [gdrive] section to secrets.toml in Streamlit Cloud settings with service account credentials and folder_id.")
             return None
         
@@ -43,7 +50,7 @@ def get_drive_service():
             st.error("❌ Invalid private_key in Google Drive configuration. Ensure it starts with '-----BEGIN PRIVATE KEY-----' and ends with '-----END PRIVATE KEY-----'.")
             return None
         
-        # Log first few characters of sensitive fields for verification
+        # Log partial sensitive fields
         logging.debug(f"project_id: {creds_dict['project_id'][:10]}...")
         logging.debug(f"client_email: {creds_dict['client_email'][:20]}...")
         logging.debug(f"folder_id: {creds_dict['folder_id']}")
@@ -125,6 +132,7 @@ def load_data(file_name, folder_id):
 
 def save_data(df, file_name):
     """Save DataFrame to an Excel file in Google Drive or local fallback"""
+    logging.debug(f"Attempting to save data to {file_name}")
     drive_service = get_drive_service()
     
     try:
@@ -136,8 +144,8 @@ def save_data(df, file_name):
         
         if not drive_service:
             # Fallback to local storage
-            logging.warning(f"Google Drive unavailable, saving to local {temp_file}")
-            st.warning(f"⚠️ Google Drive unavailable. Saving to local storage ({file_name}). Download the file as it’s temporary.")
+            logging.warning(f"Google Drive unavailable, saved to local {temp_file}")
+            st.warning(f"⚠️ Google Drive unavailable. Saved to local storage ({file_name}). Use 'Export Data' to download the file as it’s temporary.")
             return True
         
         folder_id = st.secrets["gdrive"].get("folder_id", "")
@@ -175,6 +183,6 @@ def save_data(df, file_name):
     except Exception as e:
         logging.error(f"Failed to save data to {file_name}: {str(e)}")
         # Fallback to local storage
-        logging.warning(f"Google Drive save failed, saving to local {temp_file}")
-        st.warning(f"⚠️ Failed to save to Google Drive. Saving to local storage ({file_name}). Download the file as it’s temporary.")
+        logging.warning(f"Google Drive save failed, saved to local {temp_file}")
+        st.warning(f"⚠️ Failed to save to Google Drive. Saved to local storage ({file_name}). Use 'Export Data' to download the file as it’s temporary.")
         return True
