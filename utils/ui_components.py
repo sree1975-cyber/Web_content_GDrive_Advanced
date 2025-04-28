@@ -108,41 +108,41 @@ def login_form():
     </div>
     """, unsafe_allow_html=True)
     
-    # Initialize session state for inputs
+    # Initialize session state keys
+    if "admin_password" not in st.session_state:
+        st.session_state["admin_password"] = ""
     if "guest_username" not in st.session_state:
         st.session_state["guest_username"] = ""
     if "guest_password" not in st.session_state:
         st.session_state["guest_password"] = ""
-    if "admin_password" not in st.session_state:
-        st.session_state["admin_password"] = ""
     
     # Radio button for mode selection
     mode = st.radio("Select Login Type", ["Admin", "Guest", "Public"], index=0, key="login_mode")
     logging.debug(f"Login mode selected: {mode}")
     
-    # Render input fields directly
+    # Render input fields without direct session state assignment
     if mode == "Admin":
-        st.session_state["admin_password"] = st.text_input(
+        admin_password = st.text_input(
             "Admin Password",
             type="password",
-            value=st.session_state["admin_password"],
-            key="admin_password",
+            value=st.session_state.get("admin_password", ""),
+            key="admin_password_input",
             placeholder="Enter admin password",
             help="Enter the admin password"
         )
     elif mode == "Guest":
-        st.session_state["guest_username"] = st.text_input(
+        guest_username = st.text_input(
             "Username",
-            value=st.session_state["guest_username"],
-            key="guest_username",
+            value=st.session_state.get("guest_username", ""),
+            key="guest_username_input",
             placeholder="Enter your username",
             help="Required for Guest mode"
         )
-        st.session_state["guest_password"] = st.text_input(
+        guest_password = st.text_input(
             "Guest Password",
             type="password",
-            value=st.session_state["guest_password"],
-            key="guest_password",
+            value=st.session_state.get("guest_password", ""),
+            key="guest_password_input",
             placeholder="Enter guest password",
             help="Enter the guest password"
         )
@@ -152,12 +152,15 @@ def login_form():
     # Submission form
     with st.form(key="login_submit_form", clear_on_submit=False):
         submit_button = st.form_submit_button("Login", disabled=(mode == "Public"))
-        public_button = st.form_submit_button("👥 Continue as Public User", disabled=(mode != "Public"))
+        public_button = st.form_submit_button("Continue as Public User", disabled=(mode != "Public"))
         
         if submit_button:
             if mode == "Admin":
-                if st.session_state["admin_password"] == "admin123":
+                admin_password = st.session_state.get("admin_password_input", "")
+                logging.debug(f"Admin login attempt: password={admin_password[:3]}...")
+                if admin_password == "admin123":
                     st.session_state["mode"] = "admin"
+                    st.session_state["admin_password"] = ""
                     st.success("✅ Logged in as Admin!")
                     st.balloons()
                     time.sleep(0.5)
@@ -165,14 +168,19 @@ def login_form():
                 else:
                     st.error("❌ Incorrect Admin password. Please try again.")
             elif mode == "Guest":
-                if st.session_state["guest_password"] == "guest456" and st.session_state["guest_username"]:
+                guest_username = st.session_state.get("guest_username_input", "")
+                guest_password = st.session_state.get("guest_password_input", "")
+                logging.debug(f"Guest login attempt: username={guest_username}, password={guest_password[:3]}...")
+                if guest_password == "guest456" and guest_username:
                     st.session_state["mode"] = "guest"
-                    st.session_state["username"] = st.session_state["guest_username"]
-                    st.success(f"✅ Logged in as Guest ({st.session_state['username']})!")
+                    st.session_state["username"] = guest_username
+                    st.session_state["guest_username"] = ""
+                    st.session_state["guest_password"] = ""
+                    st.success(f"✅ Logged in as Guest ({guest_username})!")
                     st.balloons()
                     time.sleep(0.5)
                     st.rerun()
-                elif not st.session_state["guest_username"]:
+                elif not guest_username:
                     st.error("❌ Username is required for Guest mode.")
                 else:
                     st.error("❌ Incorrect Guest password. Please try again.")
