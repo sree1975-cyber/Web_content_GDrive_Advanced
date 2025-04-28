@@ -20,11 +20,11 @@ def apply_css():
         border-radius: 8px;
         margin-bottom: 1rem;
     }
-    .header-admin { background-color: #5a7de3 !important; } /* Light blue for admin */
-    .header-guest { background-color: #90EE90 !important; } /* Light parrot green for guest */
+    .header-admin { background-color: #6495ED !important; } /* Light blue for admin */
+    .header-guest { background-color: #F0FFFF !important; } /* Light parrot green for guest */
     .header-public { background-color: #CCCCFF !important; } /* Light purple for public */
     .login-container {
-        background-color: #FFB6C1 !important; /* Light bluish-pink */
+        background-color: #DA70D6 !important; /* Orchid */
         padding: 2rem;
         border-radius: 8px;
         text-align: center;
