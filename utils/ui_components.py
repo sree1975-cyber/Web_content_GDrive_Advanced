@@ -5,7 +5,6 @@ from utils.data_manager import save_data
 from utils.link_operations import save_link, delete_selected_links, fetch_metadata, process_bookmark_file
 import logging
 from io import BytesIO
-import time
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
 
@@ -132,9 +131,11 @@ def add_link_section(df, excel_file, mode):
     """Section to add new links or upload bookmark files, split into two tabs"""
     st.markdown("<h3>Add New Link or Upload Bookmarks</h3>", unsafe_allow_html=True)
     
+    # Initialize session state for metadata
     if "fetched_metadata" not in st.session_state:
         st.session_state["fetched_metadata"] = {}
     
+    # Ensure tabs are always rendered
     tab1, tab2 = st.tabs(["Single URL", "Upload Bookmarks"])
     
     recommended_tags = [
@@ -142,10 +143,10 @@ def add_link_section(df, excel_file, mode):
     ]
     
     with tab1:
-        with st.form(key="single_url_form", clear_on_submit=False):
+        with st.form(key="single_url_form", clear_on_submit=True):
             st.markdown("<h4>Add Single URL</h4>", unsafe_allow_html=True)
             
-            url = st.text_input("URL", placeholder="https://example.com", key="url_input")
+            url = st.text_input("URL", placeholder="https://example.com", key="url_input_single")
             fetch_button = st.form_submit_button(
                 "Fetch Metadata",
                 help="Fetch title and description from the URL"
@@ -154,78 +155,73 @@ def add_link_section(df, excel_file, mode):
             title = st.text_input(
                 "Title (optional)",
                 value=st.session_state["fetched_metadata"].get("title", ""),
-                key="title_input"
+                key="title_input_single"
             )
             description = st.text_area(
                 "Description (optional)",
                 value=st.session_state["fetched_metadata"].get("description", ""),
-                key="description_input"
+                key="description_input_single"
             )
             tags = st.multiselect(
                 "Tags (select or type custom tags)",
                 options=recommended_tags,
                 default=st.session_state["fetched_metadata"].get("tags", []),
-                key="tags_input",
+                key="tags_input_single",
                 help="Select or type tags (press Enter to add)"
             )
             custom_tag = st.text_input(
                 "Add Custom Tag",
                 placeholder="Type a new tag and press Enter",
-                key="custom_tag_input"
+                key="custom_tag_input_single"
             )
             if custom_tag and custom_tag not in tags:
                 tags.append(custom_tag)
             
-            priority = st.selectbox("Priority", ["Low", "Medium", "High", "Important"], index=0)
-            number = st.number_input("Number (for grouping)", min_value=0, value=0, step=1)
+            priority = st.selectbox("Priority", ["Low", "Medium", "High", "Important"], index=0, key="priority_single")
+            number = st.number_input("Number (for grouping)", min_value=0, value=0, step=1, key="number_single")
             
             save_button = st.form_submit_button(
                 "💾 Save Link",
                 help="Save the link to your collection"
             )
             
-            if fetch_button or (url and st.session_state.get("url_submitted")):
-                if url:
-                    with st.spinner("Fetching metadata..."):
-                        metadata = fetch_metadata(url)
-                        st.session_state["fetched_metadata"] = {
-                            "title": metadata.get("title", ""),
-                            "description": metadata.get("description", ""),
-                            "tags": []
-                        }
-                        st.info("✅ Metadata fetched! Fields updated.")
-                        st.session_state["url_submitted"] = False
-                        st.rerun()
-                else:
-                    st.error("❌ Please provide a URL.")
+            if fetch_button and url:
+                with st.spinner("Fetching metadata..."):
+                    metadata = fetch_metadata(url)
+                    st.session_state["fetched_metadata"] = {
+                        "title": metadata.get("title", ""),
+                        "description": metadata.get("description", ""),
+                        "tags": []
+                    }
+                    st.info("✅ Metadata fetched! Fields updated.")
+                    st.rerun()
             
-            if save_button:
-                if url:
-                    new_df = save_link(df, url, title, description, tags, priority, number, mode)
-                    if mode in ["admin", "guest"] and excel_file:
-                        if save_data(new_df, excel_file):
-                            st.success("✅ Link saved successfully!")
-                            if new_df.iloc[-1]["is_duplicate"]:
-                                st.warning("⚠️ This URL is a duplicate.")
-                            st.balloons()
-                            st.session_state["fetched_metadata"] = {}
-                        else:
-                            st.error("❌ Failed to save link to Google Drive.")
-                    else:
+            if save_button and url:
+                new_df = save_link(df, url, title, description, tags, priority, number, mode)
+                if mode in ["admin", "guest"] and excel_file:
+                    if save_data(new_df, excel_file):
                         st.success("✅ Link saved successfully!")
                         if new_df.iloc[-1]["is_duplicate"]:
                             st.warning("⚠️ This URL is a duplicate.")
                         st.balloons()
                         st.session_state["fetched_metadata"] = {}
-                    return new_df
+                    else:
+                        st.error("❌ Failed to save link to Google Drive.")
                 else:
-                    st.error("❌ Please provide a URL.")
+                    st.success("✅ Link saved successfully!")
+                    if new_df.iloc[-1]["is_duplicate"]:
+                        st.warning("⚠️ This URL is a duplicate.")
+                    st.balloons()
+                    st.session_state["fetched_metadata"] = {}
+                return new_df
+            elif save_button:
+                st.error("❌ Please provide a URL.")
     
     with tab2:
-        with st.form(key="upload_bookmarks_form"):
-            st.markdown("<h4>Upload Browser Bookmarks</h4>", unsafe_allow_html=True)
-            uploaded_file = st.file_uploader("Upload Bookmarks (Excel, CSV, HTML)", type=["xlsx", "csv", "html"])
-            duplicate_action = st.selectbox("Handle Duplicates", ["Keep Both", "Skip Duplicates"], index=0)
+        st.markdown("<h4>Upload Browser Bookmarks</h4>", unsafe_allow_html=True)
+        with st.form(key="upload_bookmarks_form", clear_on_submit=True):
+            uploaded_file = st.file_uploader("Upload Bookmarks (Excel, CSV, HTML)", type=["xlsx", "csv", "html"], key="bookmark_uploader")
+            duplicate_action = st.selectbox("Handle Duplicates", ["Keep Both", "Skip Duplicates"], index=0, key="duplicate_action")
             
             if st.form_submit_button("Import Bookmarks", help="Import bookmarks from file"):
                 if uploaded_file:
@@ -248,6 +244,7 @@ def add_link_section(df, excel_file, mode):
                         return new_df
                     except Exception as e:
                         st.error(f"❌ Failed to process bookmark file: {str(e)}")
+                        logging.error(f"Bookmark upload failed: {str(e)}")
                     finally:
                         progress_bar.empty()
                 else:
@@ -331,7 +328,6 @@ def browse_section(df, excel_file, mode):
                         st.session_state["df"] = updated_df
                     st.success("✅ Selected links deleted successfully!")
                     st.snow()
-                    time.sleep(2)
                     st.rerun()
                 else:
                     st.error("❌ Please select at least one link to delete.")
@@ -353,6 +349,7 @@ def download_section(df, excel_file, mode):
     if not df_to_export.empty:
         output = pd.DataFrame()
         output["sequence_number"] = range(1, len(df_to_export) + 1)
+        output["link_id"] = df_to_export["link_id"]  # Include link_id
         output["url"] = df_to_export["url"]
         output["title"] = df_to_export["title"]
         output["description"] = df_to_export["description"]
@@ -371,8 +368,8 @@ def download_section(df, excel_file, mode):
             
             # Add hyperlinks to URL column
             for idx, url in enumerate(output["url"], start=2):
-                worksheet[f"B{idx}"].hyperlink = url
-                worksheet[f"B{idx}"].style = "Hyperlink"
+                worksheet[f"C{idx}"].hyperlink = url  # Column C (url)
+                worksheet[f"C{idx}"].style = "Hyperlink"
             
         buffer.seek(0)
         
