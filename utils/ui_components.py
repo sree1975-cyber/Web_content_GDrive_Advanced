@@ -201,11 +201,23 @@ def add_link_section(df, excel_file, mode):
         "link_id", "url", "title", "description", "tags",
         "created_at", "updated_at", "priority", "number", "is_duplicate"
     ]
-    if mode == "public" and 'user_df' not in st.session_state:
-        st.session_state['user_df'] = pd.DataFrame(columns=required_columns)
     
-    working_df = st.session_state['user_df'] if mode == "public" else df
+    # Initialize working_df with fallback
+    if mode == "public":
+        if 'user_df' not in st.session_state or not isinstance(st.session_state.get('user_df'), pd.DataFrame):
+            st.session_state['user_df'] = pd.DataFrame(columns=required_columns)
+        working_df = st.session_state['user_df']
+    else:
+        if not isinstance(df, pd.DataFrame):
+            logging.warning(f"Input df is not a DataFrame: {type(df)}. Initializing empty DataFrame.")
+            working_df = pd.DataFrame(columns=required_columns)
+        else:
+            working_df = df
     
+    # Log DataFrame state
+    logging.debug(f"add_link_section: mode={mode}, working_df type={type(working_df)}, columns={working_df.columns.tolist() if isinstance(working_df, pd.DataFrame) else None}")
+    
+    # Ensure all required columns exist
     for col in required_columns:
         if col not in working_df.columns:
             if col == "tags":
@@ -428,12 +440,18 @@ def browse_section(df, excel_file, mode):
     st.markdown("<h3>Browse Links</h3>", unsafe_allow_html=True)
     
     if mode == "public":
-        df = st.session_state.get("user_df", pd.DataFrame(columns=[
-            "link_id", "url", "title", "description", "tags", 
-            "created_at", "updated_at", "priority", "number", "is_duplicate"
-        ]))
+        if 'user_df' not in st.session_state or not isinstance(st.session_state.get('user_df'), pd.DataFrame):
+            st.session_state['user_df'] = pd.DataFrame(columns=[
+                "link_id", "url", "title", "description", "tags", 
+                "created_at", "updated_at", "priority", "number", "is_duplicate"
+            ])
+        df = st.session_state['user_df']
     
     required_columns = ["link_id", "url", "title", "description", "tags", "created_at", "updated_at", "priority", "number", "is_duplicate"]
+    if not isinstance(df, pd.DataFrame):
+        logging.warning(f"Input df is not a DataFrame: {type(df)}. Initializing empty DataFrame.")
+        df = pd.DataFrame(columns=required_columns)
+    
     for col in required_columns:
         if col not in df.columns:
             if col == "tags":
@@ -521,9 +539,17 @@ def download_section(df, excel_file, mode):
     st.markdown("<h3>Export Data</h3>", unsafe_allow_html=True)
     
     if mode == "public":
-        df_to_export = st.session_state.get("user_df", pd.DataFrame())
+        if 'user_df' not in st.session_state or not isinstance(st.session_state.get('user_df'), pd.DataFrame):
+            st.session_state['user_df'] = pd.DataFrame(columns=[
+                "link_id", "url", "title", "description", "tags", 
+                "created_at", "updated_at", "priority", "number", "is_duplicate"
+            ])
+        df_to_export = st.session_state['user_df']
     else:
-        df_to_export = df
+        df_to_export = df if isinstance(df, pd.DataFrame) else pd.DataFrame(columns=[
+            "link_id", "url", "title", "description", "tags", 
+            "created_at", "updated_at", "priority", "number", "is_duplicate"
+        ])
     
     if not df_to_export.empty:
         output = pd.DataFrame()
@@ -566,7 +592,7 @@ def analytics_section(df):
     apply_css()
     st.markdown("<h3>Analytics</h3>", unsafe_allow_html=True)
     
-    if df.empty:
+    if not isinstance(df, pd.DataFrame) or df.empty:
         st.info("No data available for analytics.")
         return
     
