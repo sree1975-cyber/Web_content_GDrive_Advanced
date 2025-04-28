@@ -9,6 +9,85 @@ import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
 import time
 import uuid
+from urllib.parse import urlparse, parse_qs
+
+def apply_css():
+    """Apply CSS for consistent color scheme across the app"""
+    css = """
+    <style>
+    /* Base styles */
+    .header-admin, .header-guest, .header-public {
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+    .header-admin { background-color: #ADD8E6 !important; } /* Light blue for admin */
+    .header-guest { background-color: #90EE90 !important; } /* Light parrot green for guest */
+    .header-public { background-color: #D8BFD8 !important; } /* Light purple for public */
+    .login-container {
+        background-color: #FFB6C1 !important; /* Light bluish-pink */
+        padding: 2rem;
+        border-radius: 8px;
+        text-align: center;
+    }
+    .button-tooltip {
+        position: relative;
+    }
+    .button-tooltip:hover::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        background-color: #333;
+        color: white;
+        padding: 0.5rem;
+        border-radius: 4px;
+        z-index: 10;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        white-space: nowrap;
+    }
+
+    /* Responsive design */
+    @media (max-width: 768px) {
+        .stForm, .stDataFrame {
+            font-size: 14px;
+        }
+        .stButton > button {
+            width: 100%;
+            margin-bottom: 0.5rem;
+        }
+        .stDataFrame {
+            overflow-x: auto;
+        }
+    }
+
+    /* Debug CSS application */
+    .debug-css::after {
+        content: "CSS Loaded";
+        display: none;
+    }
+    </style>
+    <div class="debug-css"></div>
+    """
+    st.markdown(css, unsafe_allow_html=True)
+
+def get_youtube_channel(url):
+    """Extract YouTube channel identifier from URL"""
+    parsed = urlparse(url)
+    if parsed.netloc in ['www.youtube.com', 'youtube.com']:
+        # Channel URL, e.g., https://www.youtube.com/@Stockbeevideos
+        if parsed.path.startswith('/@'):
+            return parsed.path[1:]  # e.g., Stockbeevideos
+        # Video URL with channel query param, e.g., ab_channel=Stockbee
+        query = parse_qs(parsed.query)
+        if 'ab_channel' in query:
+            return query['ab_channel'][0]  # e.g., Stockbee
+    return None
+
+def get_domain(url):
+    """Extract base domain from URL"""
+    parsed = urlparse(url)
+    return parsed.netloc  # e.g., www.youtube.com
 
 def apply_css():
     """Apply CSS for consistent color scheme across the app"""
@@ -194,17 +273,43 @@ def add_link_section(df, excel_file, mode):
             help="Enter the full URL including https://"
         )
         
-        # Check for existing URL and pre-fill tags
+        # Check for existing URL or related URLs (same domain or YouTube channel)
         prefilled_tags = []
+        match_type = ""
         if url_temp and not working_df.empty and 'url' in working_df.columns:
+            # First, try exact URL match
             matching_rows = working_df[working_df['url'] == url_temp]
             if not matching_rows.empty:
-                # Sort by updated_at (most recent first) and get tags from the latest entry
+                # Sort by updated_at (most recent first) and get tags
                 matching_rows = matching_rows.sort_values(by='updated_at', ascending=False)
                 prefilled_tags = matching_rows.iloc[0]['tags'] if isinstance(matching_rows.iloc[0]['tags'], list) else []
-                if prefilled_tags:
-                    st.info("✅ Tags pre-filled from previous entry for this URL.")
-        
+                match_type = "exact URL"
+            else:
+                # Try YouTube channel match
+                channel = get_youtube_channel(url_temp)
+                if channel:
+                    # Add channel column to working_df if not present
+                    if 'channel' not in working_df.columns:
+                        working_df['channel'] = working_df['url'].apply(get_youtube_channel)
+                    matching_rows = working_df[working_df['channel'] == channel]
+                    if not matching_rows.empty:
+                        matching_rows = matching_rows.sort_values(by='updated_at', ascending=False)
+                        prefilled_tags = matching_rows.iloc[0]['tags'] if isinstance(matching_rows.iloc[0]['tags'], list) else []
+                        match_type = f"YouTube channel ({channel})"
+                else:
+                    # Fall back to domain match
+                    domain = get_domain(url_temp)
+                    if 'domain' not in working_df.columns:
+                        working_df['domain'] = working_df['url'].apply(get_domain)
+                    matching_rows = working_df[working_df['domain'] == domain]
+                    if not matching_rows.empty:
+                        matching_rows = matching_rows.sort_values(by='updated_at', ascending=False)
+                        prefilled_tags = matching_rows.iloc[0]['tags'] if isinstance(matching_rows.iloc[0]['tags'], list) else []
+                        match_type = f"domain ({domain})"
+            
+            if prefilled_tags:
+                st.info(f"✅ Tags pre-filled based on previous {match_type}.")
+
         is_url_valid = url_temp.startswith(("http://", "https://")) if url_temp else False
         
         if st.button("Fetch Metadata", disabled=not is_url_valid, key="fetch_metadata"):
