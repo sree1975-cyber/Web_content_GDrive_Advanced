@@ -21,12 +21,19 @@ def get_drive_service():
         drive_service = build('drive', 'v3', credentials=creds)
         logging.debug("Google Drive service initialized successfully")
         return drive_service
+    except KeyError as e:
+        logging.error(f"Google Drive secrets missing: {str(e)}. Ensure 'gdrive' key is in secrets.toml")
+        st.error("❌ Google Drive configuration is missing. Please check secrets.toml in Streamlit Cloud settings.")
+        return None
     except Exception as e:
         logging.error(f"Failed to initialize Google Drive service: {str(e)}")
+        st.error(f"❌ Failed to initialize Google Drive: {str(e)}")
         return None
 
 def get_file_id(drive_service, file_name, folder_id):
     """Get the file ID of an Excel file in Google Drive"""
+    if not drive_service:
+        return None
     try:
         query = f"name='{file_name}' and '{folder_id}' in parents and trashed=false"
         results = drive_service.files().list(q=query, fields="files(id, name)").execute()
@@ -53,20 +60,16 @@ def load_data(file_name, folder_id):
         return None
     
     try:
-        # Download the file
         request = drive_service.files().get_media(fileId=file_id)
         file_path = f"/tmp/{file_name}"
         with open(file_path, 'wb') as f:
             f.write(request.execute())
         
-        # Read Excel file
         df = pd.read_excel(file_path)
         
-        # Ensure tags are lists
         if 'tags' in df.columns:
             df['tags'] = df['tags'].apply(lambda x: x.split(',') if isinstance(x, str) else x)
         
-        # Clean up
         os.remove(file_path)
         logging.debug(f"Loaded data from {file_name}: {len(df)} rows")
         return df
@@ -81,30 +84,24 @@ def save_data(df, file_name):
         return False
     
     try:
-        # Save DataFrame to temporary Excel file
         temp_file = f"/tmp/{file_name}"
         output_df = df.copy()
         if 'tags' in output_df.columns:
             output_df['tags'] = output_df['tags'].apply(lambda x: ','.join(x) if isinstance(x, list) else x)
         output_df.to_excel(temp_file, index=False)
         
-        # Get folder ID from secrets
         folder_id = st.secrets["gdrive"].get("folder_id", "")
         
-        # Check if file exists
         file_id = get_file_id(drive_service, file_name, folder_id)
         
-        # Upload or update file
         media = MediaFileUpload(temp_file, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         if file_id:
-            # Update existing file
             drive_service.files().update(
                 fileId=file_id,
                 media_body=media
             ).execute()
             logging.debug(f"Updated file {file_name} with ID {file_id}")
         else:
-            # Create new file
             file_metadata = {
                 'name': file_name,
                 'parents': [folder_id],
@@ -118,7 +115,6 @@ def save_data(df, file_name):
             file_id = file.get('id')
             logging.debug(f"Created new file {file_name} with ID {file_id}")
         
-        # Clean up
         os.remove(temp_file)
         return True
     except Exception as e:
