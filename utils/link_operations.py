@@ -22,17 +22,9 @@ def fetch_metadata(url):
         if meta_desc and meta_desc.get('content'):
             description = meta_desc['content']
         
-        keywords = []
-        if title:
-            keywords.extend(title.lower().split())
-        if description:
-            keywords.extend(description.lower().split())
-        tags = list(set([kw for kw in keywords if len(kw) > 3 and kw.isalpha()][:5]))
-        
         return {
             'title': title,
-            'description': description,
-            'tags': tags
+            'description': description
         }
     except Exception as e:
         logging.error(f"Metadata fetch failed for {url}: {str(e)}")
@@ -97,14 +89,11 @@ def process_bookmark_file(df, uploaded_file, mode, duplicate_action, progress_ba
                     continue
                 title = row.get('Title') or row.get('title') or ''
                 description = row.get('Description') or row.get('description') or ''
-                tags = row.get('Tags') or row.get('tags') or ''
-                tags_list = [tag.strip() for tag in tags.split(',')] if isinstance(tags, str) else []
                 number = row.get('Number') or row.get('number') or idx + 1
                 links.append({
                     'url': url,
                     'title': title,
                     'description': description,
-                    'tags': tags_list,
                     'priority': 'Low',
                     'number': number
                 })
@@ -116,12 +105,10 @@ def process_bookmark_file(df, uploaded_file, mode, duplicate_action, progress_ba
                 if not url:
                     continue
                 title = a_tag.text.strip() or ''
-                tags = a_tag.get('tags', '').split(',') or []
                 links.append({
                     'url': url,
                     'title': title,
                     'description': '',
-                    'tags': tags,
                     'priority': 'Low',
                     'number': idx
                 })
@@ -142,8 +129,6 @@ def process_bookmark_file(df, uploaded_file, mode, duplicate_action, progress_ba
                 link['title'] = metadata['title']
             if metadata.get('description') and not link['description']:
                 link['description'] = metadata['description']
-            link['tags'].extend(metadata.get('tags', []))
-            link['tags'] = list(set(link['tags']))
             link['is_duplicate'] = link['url'] in existing_urls
             if link['is_duplicate'] and duplicate_action == "Skip Duplicates":
                 continue
@@ -154,7 +139,8 @@ def process_bookmark_file(df, uploaded_file, mode, duplicate_action, progress_ba
         if not processed_links:
             raise ValueError("No new URLs to process after duplicate handling.")
         
-        texts = [f"{link['title']} {link['description']} {' '.join(link['tags'])}" for link in processed_links]
+        # ML-based single tag prediction
+        texts = [f"{link['title']} {link['description']}" for link in processed_links]
         vectorizer = TfidfVectorizer(max_features=1000, stop_words='english')
         X = vectorizer.fit_transform(texts)
         kmeans = KMeans(n_clusters=min(5, len(processed_links)), random_state=42)
@@ -163,8 +149,7 @@ def process_bookmark_file(df, uploaded_file, mode, duplicate_action, progress_ba
         categories = ['News', 'Shopping', 'Research', 'Entertainment', 'Other']
         for i, link in enumerate(processed_links):
             cluster = labels[i]
-            link['tags'].append(categories[cluster % len(categories)])
-            link['tags'] = list(set(link['tags']))
+            link['tags'] = categories[cluster % len(categories)]  # Assign single tag as string
         
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         new_rows = pd.DataFrame([
@@ -173,7 +158,7 @@ def process_bookmark_file(df, uploaded_file, mode, duplicate_action, progress_ba
                 'url': link['url'],
                 'title': link['title'],
                 'description': link['description'],
-                'tags': link['tags'],
+                'tags': link['tags'],  # Single tag as string
                 'created_at': now,
                 'updated_at': now,
                 'priority': link['priority'],
