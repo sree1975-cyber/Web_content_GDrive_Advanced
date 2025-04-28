@@ -34,6 +34,12 @@ def main():
     # Get mode and username
     mode = st.session_state["mode"]
     username = st.session_state.get("username", None)
+    if mode == "guest" and not username:
+        logging.error("Guest mode but username is None")
+        st.error("❌ Username missing for Guest mode. Please log in again.")
+        st.session_state["mode"] = None
+        st.rerun()
+    
     logging.debug(f"Main: mode={mode}, username={username}")
     
     # Display header
@@ -50,7 +56,7 @@ def main():
         folder_id = st.secrets["gdrive"].get("folder_id", "") if "gdrive" in st.secrets else ""
         logging.debug(f"Excel file set to: {excel_file}, folder_id={folder_id}")
         
-        # Load data from Google Drive
+        # Load data from Google Drive or local
         user_df = load_data(excel_file, folder_id)
         if user_df is None or not isinstance(user_df, pd.DataFrame):
             logging.warning(f"Failed to load {excel_file} or invalid DataFrame. Initializing empty DataFrame.")
