@@ -89,12 +89,11 @@ def add_link_section(df, excel_file, mode):
         with st.form(key="single_url_form"):
             st.markdown("<h4>Add Single URL</h4>", unsafe_allow_html=True)
             
-            # URL input with Fetch Metadata button
-            col_url, col_fetch = st.columns([3, 1])
-            with col_url:
-                url = st.text_input("URL", placeholder="https://example.com", key="url_input")
-            with col_fetch:
-                fetch_button = st.form_submit_button("Fetch Metadata")
+            # URL input
+            url = st.text_input("URL", placeholder="https://example.com", key="url_input")
+            
+            # Fetch Metadata button below URL
+            fetch_button = st.form_submit_button("Fetch Metadata")
             
             title = st.text_input(
                 "Title (optional)",
@@ -111,8 +110,12 @@ def add_link_section(df, excel_file, mode):
                 options=recommended_tags,
                 default=st.session_state['fetched_metadata'].get('tags', []),
                 key="tags_input",
-                help="Select from recommended tags or type custom tags"
+                help="Select from recommended tags or type custom tags (press Enter to add)"
             )
+            custom_tag = st.text_input("Add Custom Tag", placeholder="Type a new tag and press Enter", key="custom_tag_input")
+            if custom_tag and custom_tag not in tags:
+                tags.append(custom_tag)
+            
             priority = st.selectbox("Priority", ["Low", "Medium", "High", "Important"], index=0)
             number = st.number_input("Number (for grouping related links)", min_value=0, value=0, step=1)
             
@@ -120,14 +123,15 @@ def add_link_section(df, excel_file, mode):
             
             if fetch_button and url:
                 try:
-                    metadata = fetch_metadata(url)
-                    st.session_state['fetched_metadata'] = {
-                        'title': metadata.get('title', ''),
-                        'description': metadata.get('description', ''),
-                        'tags': metadata.get('tags', [])
-                    }
-                    st.success("✅ Metadata fetched! Fields updated.")
-                    st.rerun()
+                    with st.spinner("Fetching metadata..."):
+                        metadata = fetch_metadata(url)
+                        st.session_state['fetched_metadata'] = {
+                            'title': metadata.get('title', ''),
+                            'description': metadata.get('description', ''),
+                            'tags': []
+                        }
+                        st.info("✅ Metadata fetched! Fields updated.")
+                        st.rerun()
                 except Exception as e:
                     st.error(f"Failed to fetch metadata: {str(e)}")
             
@@ -204,7 +208,7 @@ def browse_section(df, excel_file, mode):
     for col in required_columns:
         if col not in df.columns:
             if col == 'tags':
-                df[col] = [[] for _ in range(len(df))]
+                df[col] = ''
             elif col == 'is_duplicate':
                 df[col] = False
             else:
@@ -216,7 +220,7 @@ def browse_section(df, excel_file, mode):
     # Handle tag filtering safely
     tag_options = []
     if not df.empty and 'tags' in df.columns:
-        tag_options = sorted(set(tag for tags in df['tags'] if isinstance(tags, list) for tag in tags))
+        tag_options = sorted(set(df['tags'].dropna().astype(str)))
     tag_filter = st.multiselect("Filter by Tags", options=tag_options)
     
     filtered_df = df.copy()
@@ -225,10 +229,10 @@ def browse_section(df, excel_file, mode):
             filtered_df['title'].str.contains(search_query, case=False, na=False) |
             filtered_df['description'].str.contains(search_query, case=False, na=False) |
             filtered_df['url'].str.contains(search_query, case=False, na=False) |
-            filtered_df['tags'].apply(lambda tags: any(search_query.lower() in tag.lower() for tag in tags) if isinstance(tags, list) else False)
+            filtered_df['tags'].str.contains(search_query, case=False, na=False)
         ]
     if tag_filter:
-        filtered_df = filtered_df[filtered_df['tags'].apply(lambda tags: any(tag in tags for tag in tag_filter) if isinstance(tags, list) else False)]
+        filtered_df = filtered_df[filtered_df['tags'].isin(tag_filter)]
     
     # Sort by priority and number
     priority_order = {'Important': 0, 'High': 1, 'Medium': 2, 'Low': 3}
@@ -240,12 +244,11 @@ def browse_section(df, excel_file, mode):
     if not filtered_df.empty:
         st.markdown("<h4>View All Links as Data Table</h4>", unsafe_allow_html=True)
         display_df = filtered_df[['url', 'title', 'description', 'tags', 'priority', 'number', 'is_duplicate']].copy()
-        display_df['tags'] = display_df['tags'].apply(lambda x: ", ".join(x) if isinstance(x, list) else '')
-        display_df['select'] = False  # Add select column explicitly
+        display_df['delete'] = False  # Add delete column explicitly
         
         # Define column configuration for data_editor
         column_config = {
-            "select": st.column_config.CheckboxColumn("Select", default=False),
+            "delete": st.column_config.CheckboxColumn("Delete", default=False),
             "url": st.column_config.TextColumn("URL"),
             "title": st.column_config.TextColumn("Title"),
             "description": st.column_config.TextColumn("Description"),
@@ -266,8 +269,8 @@ def browse_section(df, excel_file, mode):
         
         # Delete selected links
         if st.button("🗑️ Delete Selected Links", key="delete_button"):
-            if 'select' in edited_df.columns:
-                selected_indices = edited_df[edited_df['select'] == True].index
+            if 'delete' in edited_df.columns:
+                selected_indices = edited_df[edited_df['delete'] == True].index
                 if not selected_indices.empty:
                     selected_link_ids = filtered_df.iloc[selected_indices]['link_id'].tolist()
                     updated_df = delete_selected_links(df, selected_link_ids, excel_file, mode)
@@ -276,12 +279,12 @@ def browse_section(df, excel_file, mode):
                     else:
                         st.session_state['df'] = updated_df
                     st.success("✅ Selected links deleted successfully!")
-                    st.balloons()
+                    st.snow()  # Snowfall animation for deletion
                     st.rerun()
                 else:
                     st.error("❌ Please select at least one link to delete.")
             else:
-                st.error("❌ Selection column not found. Please try again.")
+                st.error("❌ Deletion column not found. Please try again.")
     
     if filtered_df.empty:
         st.info("No links match the search criteria.")
@@ -301,7 +304,7 @@ def download_section(df, excel_file, mode):
         output['url'] = df_to_export['url']
         output['title'] = df_to_export['title']
         output['description'] = df_to_export['description']
-        output['tags'] = df_to_export['tags'].apply(lambda x: ", ".join(x) if isinstance(x, list) else '')
+        output['tags'] = df_to_export['tags'].astype(str)  # Ensure tags are strings
         output['priority'] = df_to_export['priority']
         output['number'] = df_to_export['number']
         output['created_at'] = df_to_export['created_at']
