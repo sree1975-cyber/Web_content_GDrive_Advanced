@@ -22,7 +22,7 @@ def apply_css():
     }
     .header-admin { background-color: #5a7de3 !important; } /* Light blue for admin */
     .header-guest { background-color: #90EE90 !important; } /* Light parrot green for guest */
-    .header-public { background-color: #D8BFD8 !important; } /* Light purple for public */
+    .header-public { background-color: #CCCCFF !important; } /* Light purple for public */
     .login-container {
         background-color: #FFB6C1 !important; /* Light bluish-pink */
         padding: 2rem;
