@@ -81,6 +81,9 @@ def main():
                 st.session_state["user_df"] = new_df
             else:
                 st.session_state["df"] = new_df
+                if excel_file:
+                    logging.debug(f"Saving new_df to {excel_file}")
+                    save_data(new_df, excel_file)
     
     with tab_objects[1]:
         browse_section(user_df, excel_file, mode)
