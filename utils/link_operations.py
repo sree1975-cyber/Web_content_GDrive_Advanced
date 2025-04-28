@@ -14,27 +14,24 @@ import os
 def fetch_metadata(url):
     """Fetch metadata for a given URL with fallback handling"""
     try:
-        # Try newspaper3k
         article = Article(url, fetch_images=False)
         article.download()
         article.parse()
         title = article.title or ""
         description = article.meta_description or article.text[:200] or ""
         
-        # Fallback to BeautifulSoup if newspaper3k fails
         if not title or not description:
-            response = requests.get(url, timeout=5)
+            response = requests.get(url, timeout=10)
             soup = BeautifulSoup(response.content, 'html.parser')
             title = soup.title.string if soup.title else ""
             meta_desc = soup.find('meta', attrs={'name': 'description'})
             description = meta_desc['content'] if meta_desc else ""
         
-        # Generate tags
         try:
             nlp = spacy.load("en_core_web_sm")
             doc = nlp(f"{title} {description}")
             tags = [token.text.lower() for token in doc if token.pos_ in ["NOUN", "PROPN"] and len(token.text) > 2]
-            tags = list(set(tags))[:5]  # Limit to 5 unique tags
+            tags = list(set(tags))[:5]
         except Exception as e:
             logging.error(f"Failed to load spaCy model: {str(e)}")
             tags = []
@@ -48,7 +45,6 @@ def fetch_metadata(url):
 def save_link(df, url, title, description, tags, priority, number, mode):
     """Save a new link to the DataFrame"""
     try:
-        # Initialize DataFrame if empty
         required_columns = [
             "link_id", "url", "title", "description", "tags",
             "created_at", "updated_at", "priority", "number", "is_duplicate"
@@ -56,10 +52,8 @@ def save_link(df, url, title, description, tags, priority, number, mode):
         if df.empty:
             df = pd.DataFrame(columns=required_columns)
         
-        # Check for duplicates
         is_duplicate = url in df["url"].values
         
-        # Create new row
         new_row = {
             "link_id": str(uuid.uuid4()),
             "url": url,
@@ -73,13 +67,10 @@ def save_link(df, url, title, description, tags, priority, number, mode):
             "is_duplicate": is_duplicate
         }
         
-        # Append new row
         new_df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
         logging.debug(f"Saved link: {url}, Duplicate={is_duplicate}")
         return new_df
-    except Exception as e:
-        logging.error(f"Failed to save link {url}: {str(e)}")
-        return None
+    ..
 
 def delete_selected_links(df, link_ids, excel_file, mode):
     """Delete selected links from the DataFrame"""
@@ -115,7 +106,6 @@ def process_bookmark_file(df, uploaded_file, mode, duplicate_action, progress_ba
         else:
             raise ValueError("Unsupported file format")
         
-        # Standardize columns
         new_data = new_data.rename(columns={
             "URL": "url", "Link": "url", "href": "url",
             "Title": "title", "Name": "title",
@@ -123,15 +113,12 @@ def process_bookmark_file(df, uploaded_file, mode, duplicate_action, progress_ba
             "Tags": "tags", "Keywords": "tags"
         })
         
-        # Ensure required columns
         for col in ["url", "title", "description", "tags"]:
             if col not in new_data.columns:
                 new_data[col] = "" if col != "tags" else []
         
-        # Process tags
         new_data["tags"] = new_data["tags"].apply(lambda x: x.split(',') if isinstance(x, str) else x if isinstance(x, list) else [])
         
-        # Add missing columns
         new_data["link_id"] = [str(uuid.uuid4()) for _ in range(len(new_data))]
         new_data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         new_data["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -139,17 +126,13 @@ def process_bookmark_file(df, uploaded_file, mode, duplicate_action, progress_ba
         new_data["number"] = 0
         new_data["is_duplicate"] = False
         
-        # Handle duplicates
         if duplicate_action == "Skip Duplicates":
             new_data = new_data[~new_data["url"].isin(df["url"])]
         
-        # Update is_duplicate
         new_data["is_duplicate"] = new_data["url"].isin(df["url"])
         
-        # Concatenate with existing DataFrame
         updated_df = pd.concat([df, new_data], ignore_index=True)
         
-        # Update progress
         progress_bar.progress(1.0)
         logging.debug(f"Processed bookmark file: {len(new_data)} new links")
         return updated_df
