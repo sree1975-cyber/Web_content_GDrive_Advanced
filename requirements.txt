@@ -10,4 +10,5 @@ newspaper3k==0.2.8
 spacy==3.7.6
 google-api-python-client==2.149.0
 lxml==5.3.0
+lxml_html_clean==0.3.1
 numpy==1.26.4
