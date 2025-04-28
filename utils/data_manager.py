@@ -1,156 +1,126 @@
 import streamlit as st
 import pandas as pd
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
+import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import io
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 import logging
 import os
-import json
-from openpyxl import Workbook
-from openpyxl.styles import PatternFill, Font, Alignment
 
 def get_drive_service():
     """Initialize Google Drive API service"""
     try:
-        credentials_data = st.secrets.get("GOOGLE_DRIVE_CREDENTIALS")
-        if not credentials_data:
-            raise ValueError("GOOGLE_DRIVE_CREDENTIALS not found in secrets")
-        
-        # Handle string-based secrets (e.g., JSON string)
-        if isinstance(credentials_data, str):
-            try:
-                credentials_data = json.loads(credentials_data)
-            except json.JSONDecodeError as e:
-                raise ValueError(f"GOOGLE_DRIVE_CREDENTIALS is a string but not valid JSON: {str(e)}")
-        
-        # Ensure credentials_data is a dictionary
-        if not isinstance(credentials_data, dict):
-            raise ValueError(f"GOOGLE_DRIVE_CREDENTIALS must be a dictionary, got {type(credentials_data)}")
-
-        credentials = ServiceAccountCredentials.from_json_keyfile_dict(
-            credentials_data,
-            scopes=["https://www.googleapis.com/auth/drive"]
+        creds_dict = st.secrets["gdrive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(
+            creds_dict, 
+            scopes=[
+                'https://www.googleapis.com/auth/drive',
+                'https://spreadsheets.google.com/feeds'
+            ]
         )
-        return build("drive", "v3", credentials=credentials)
+        drive_service = build('drive', 'v3', credentials=creds)
+        logging.debug("Google Drive service initialized successfully")
+        return drive_service
     except Exception as e:
-        logging.error(f"Failed to initialize Drive service: {str(e)}")
+        logging.error(f"Failed to initialize Google Drive service: {str(e)}")
         return None
 
-def load_data(excel_file):
-    """Load data from Google Drive or fallback to session state"""
+def get_file_id(drive_service, file_name, folder_id):
+    """Get the file ID of an Excel file in Google Drive"""
     try:
-        drive_service = get_drive_service()
-        if not drive_service:
-            logging.warning("Drive service unavailable, checking session state")
-            return st.session_state.get("local_df", pd.DataFrame(columns=[
-                "link_id", "url", "title", "description", "tags",
-                "created_at", "updated_at", "priority", "number", "is_duplicate"
-            ]))
-        
-        folder_id = st.secrets.get("GOOGLE_DRIVE_FOLDER_ID")
-        if not folder_id:
-            raise ValueError("GOOGLE_DRIVE_FOLDER_ID not found in secrets")
-        
-        query = f"name='{excel_file}' and '{folder_id}' in parents and trashed=false"
-        response = drive_service.files().list(q=query, fields="files(id, name)").execute()
-        files = response.get("files", [])
-        
-        if not files:
-            logging.info(f"No file named {excel_file} found in Drive folder")
-            return st.session_state.get("local_df", pd.DataFrame(columns=[
-                "link_id", "url", "title", "description", "tags",
-                "created_at", "updated_at", "priority", "number", "is_duplicate"
-            ]))
-        
-        file_id = files[0]["id"]
+        query = f"name='{file_name}' and '{folder_id}' in parents and trashed=false"
+        results = drive_service.files().list(q=query, fields="files(id, name)").execute()
+        files = results.get('files', [])
+        if files:
+            file_id = files[0]['id']
+            logging.debug(f"Found file {file_name} with ID {file_id}")
+            return file_id
+        logging.debug(f"No file found with name {file_name}")
+        return None
+    except Exception as e:
+        logging.error(f"Failed to get file ID for {file_name}: {str(e)}")
+        return None
+
+def load_data(file_name, folder_id):
+    """Load data from an Excel file in Google Drive"""
+    drive_service = get_drive_service()
+    if not drive_service:
+        return None
+    
+    file_id = get_file_id(drive_service, file_name, folder_id)
+    if not file_id:
+        logging.debug(f"No existing file {file_name}, returning empty DataFrame")
+        return None
+    
+    try:
+        # Download the file
         request = drive_service.files().get_media(fileId=file_id)
-        fh = io.BytesIO()
-        downloader = MediaIoBaseDownload(fh, request)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
+        file_path = f"/tmp/{file_name}"
+        with open(file_path, 'wb') as f:
+            f.write(request.execute())
         
-        fh.seek(0)
-        df = pd.read_excel(fh, engine="openpyxl")
-        st.session_state["local_df"] = df  # Cache in session state
+        # Read Excel file
+        df = pd.read_excel(file_path)
+        
+        # Ensure tags are lists
+        if 'tags' in df.columns:
+            df['tags'] = df['tags'].apply(lambda x: x.split(',') if isinstance(x, str) else x)
+        
+        # Clean up
+        os.remove(file_path)
+        logging.debug(f"Loaded data from {file_name}: {len(df)} rows")
         return df
     except Exception as e:
-        logging.error(f"Failed to load data from Drive: {str(e)}")
-        st.error("❌ Failed to load data from Google Drive. Using local storage.")
-        return st.session_state.get("local_df", pd.DataFrame(columns=[
-            "link_id", "url", "title", "description", "tags",
-            "created_at", "updated_at", "priority", "number", "is_duplicate"
-        ]))
+        logging.error(f"Failed to load data from {file_name}: {str(e)}")
+        return None
 
-def save_data(df, excel_file):
-    """Save DataFrame to Google Drive and session state with link_id and hyperlinked URLs"""
+def save_data(df, file_name):
+    """Save DataFrame to an Excel file in Google Drive"""
+    drive_service = get_drive_service()
+    if not drive_service:
+        return False
+    
     try:
-        drive_service = get_drive_service()
-        st.session_state["local_df"] = df  # Always save to session state
+        # Save DataFrame to temporary Excel file
+        temp_file = f"/tmp/{file_name}"
+        output_df = df.copy()
+        if 'tags' in output_df.columns:
+            output_df['tags'] = output_df['tags'].apply(lambda x: ','.join(x) if isinstance(x, list) else x)
+        output_df.to_excel(temp_file, index=False)
         
-        # Ensure all required columns are present
-        required_columns = [
-            "link_id", "url", "title", "description", "tags",
-            "created_at", "updated_at", "priority", "number", "is_duplicate"
-        ]
-        for col in required_columns:
-            if col not in df.columns:
-                if col == "tags":
-                    df[col] = ""
-                elif col == "is_duplicate":
-                    df[col] = False
-                elif col == "link_id":
-                    df[col] = [str(uuid.uuid4()) for _ in range(len(df))]
-                else:
-                    df[col] = ""
+        # Get folder ID from secrets
+        folder_id = st.secrets["gdrive"].get("folder_id", "")
         
-        # Create output DataFrame with desired column order
-        output_df = df[required_columns].copy()
+        # Check if file exists
+        file_id = get_file_id(drive_service, file_name, folder_id)
         
-        if not drive_service:
-            logging.error("Drive service unavailable, saved to session state only")
-            st.warning("⚠️ Saved locally but could not save to Google Drive.")
-            return True
-        
-        folder_id = st.secrets.get("GOOGLE_DRIVE_FOLDER_ID")
-        if not folder_id:
-            raise ValueError("GOOGLE_DRIVE_FOLDER_ID not found in secrets")
-        
-        query = f"name='{excel_file}' and '{folder_id}' in parents and trashed=false"
-        response = drive_service.files().list(q=query, fields="files(id, name)").execute()
-        files = response.get("files", [])
-        
-        # Save DataFrame to temporary file with hyperlinks
-        temp_file = "temp_links.xlsx"
-        with pd.ExcelWriter(temp_file, engine="openpyxl") as writer:
-            output_df.to_excel(writer, index=False, sheet_name="Links")
-            workbook = writer.book
-            worksheet = writer.sheets["Links"]
-            
-            # Add hyperlinks to URL column (column B, since link_id is column A)
-            for idx, url in enumerate(output_df["url"], start=2):
-                worksheet[f"B{idx}"].hyperlink = url
-                worksheet[f"B{idx}"].style = "Hyperlink"
-        
-        file_metadata = {
-            "name": excel_file,
-            "parents": [folder_id]
-        }
-        
-        media = MediaFileUpload(temp_file, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        
-        if files:
+        # Upload or update file
+        media = MediaFileUpload(temp_file, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        if file_id:
             # Update existing file
-            file_id = files[0]["id"]
-            drive_service.files().update(fileId=file_id, media_body=media).execute()
+            drive_service.files().update(
+                fileId=file_id,
+                media_body=media
+            ).execute()
+            logging.debug(f"Updated file {file_name} with ID {file_id}")
         else:
             # Create new file
-            drive_service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+            file_metadata = {
+                'name': file_name,
+                'parents': [folder_id],
+                'mimeType': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            }
+            file = drive_service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields='id'
+            ).execute()
+            file_id = file.get('id')
+            logging.debug(f"Created new file {file_name} with ID {file_id}")
         
+        # Clean up
         os.remove(temp_file)
         return True
     except Exception as e:
-        logging.error(f"Failed to save data to Drive: {str(e)}")
-        st.error("❌ Failed to save data to Google Drive. Saved locally.")
-        return True
+        logging.error(f"Failed to save data to {file_name}: {str(e)}")
+        return False
