@@ -1,16 +1,12 @@
 import streamlit as st
 import pandas as pd
-from newspaper import Article
 from datetime import datetime
 import logging
 import uuid
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-import spacy
-import re
-
-# Load spaCy model for text preprocessing
-nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+import requests
+from bs4 import BeautifulSoup
 
 # Hardcoded labeled dataset for training
 TRAINING_DATA = [
@@ -37,13 +33,16 @@ VECTORIZER, CLASSIFIER = train_classifier()
 
 @st.cache_data
 def fetch_metadata(url):
-    """Fetch metadata for a given URL using newspaper3k, with caching"""
+    """Fetch metadata for a given URL using BeautifulSoup, with caching"""
     try:
-        article = Article(url)
-        article.download()
-        article.parse()
-        title = article.title or ""
-        description = article.meta_description or article.text[:200] or ""
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        title = soup.find("title").text if soup.find("title") else ""
+        description = ""
+        meta_desc = soup.find("meta", attrs={"name": "description"})
+        if meta_desc and meta_desc.get("content"):
+            description = meta_desc["content"]
         return {"title": title, "description": description}
     except Exception as e:
         logging.error(f"Metadata fetch failed for {url}: {str(e)}")
@@ -96,13 +95,9 @@ def predict_tag(text, url):
     """Predict a single tag using classifier or rule-based fallback"""
     categories = ["News", "Shopping", "Research", "Entertainment", "Cloud", "Education", "Other"]
     
-    # Preprocess text with spaCy
-    doc = nlp(text)
-    processed_text = " ".join([token.lemma_ for token in doc if not token.is_stop])
-    
     try:
         # Use classifier
-        X = VECTORIZER.transform([processed_text])
+        X = VECTORIZER.transform([text])
         tag = CLASSIFIER.predict(X)[0]
         if tag in categories:
             return tag
@@ -110,7 +105,7 @@ def predict_tag(text, url):
         logging.error(f"Classifier prediction failed: {str(e)}")
     
     # Fallback: Rule-based tagging
-    text_lower = processed_text.lower()
+    text_lower = text.lower()
     url_lower = url.lower()
     rules = {
         "News": ["news", "article", "cnn", "bbc", "nytimes", "guardian"],
