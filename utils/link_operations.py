@@ -70,7 +70,9 @@ def save_link(df, url, title, description, tags, priority, number, mode):
         new_df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
         logging.debug(f"Saved link: {url}, Duplicate={is_duplicate}")
         return new_df
-    ..
+    except Exception as e:
+        logging.error(f"Failed to save link {url}: {str(e)}")
+        return None
 
 def delete_selected_links(df, link_ids, excel_file, mode):
     """Delete selected links from the DataFrame"""
