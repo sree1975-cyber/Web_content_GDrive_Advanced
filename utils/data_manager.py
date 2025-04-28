@@ -7,6 +7,8 @@ import io
 import logging
 import os
 import json
+from openpyxl import Workbook
+from openpyxl.styles import PatternFill, Font, Alignment
 
 def get_drive_service():
     """Initialize Google Drive API service"""
@@ -82,10 +84,29 @@ def load_data(excel_file):
         ]))
 
 def save_data(df, excel_file):
-    """Save DataFrame to Google Drive and session state"""
+    """Save DataFrame to Google Drive and session state with link_id and hyperlinked URLs"""
     try:
         drive_service = get_drive_service()
         st.session_state["local_df"] = df  # Always save to session state
+        
+        # Ensure all required columns are present
+        required_columns = [
+            "link_id", "url", "title", "description", "tags",
+            "created_at", "updated_at", "priority", "number", "is_duplicate"
+        ]
+        for col in required_columns:
+            if col not in df.columns:
+                if col == "tags":
+                    df[col] = ""
+                elif col == "is_duplicate":
+                    df[col] = False
+                elif col == "link_id":
+                    df[col] = [str(uuid.uuid4()) for _ in range(len(df))]
+                else:
+                    df[col] = ""
+        
+        # Create output DataFrame with desired column order
+        output_df = df[required_columns].copy()
         
         if not drive_service:
             logging.error("Drive service unavailable, saved to session state only")
@@ -100,9 +121,17 @@ def save_data(df, excel_file):
         response = drive_service.files().list(q=query, fields="files(id, name)").execute()
         files = response.get("files", [])
         
-        # Save DataFrame to temporary file
+        # Save DataFrame to temporary file with hyperlinks
         temp_file = "temp_links.xlsx"
-        df.to_excel(temp_file, index=False, engine="openpyxl")
+        with pd.ExcelWriter(temp_file, engine="openpyxl") as writer:
+            output_df.to_excel(writer, index=False, sheet_name="Links")
+            workbook = writer.book
+            worksheet = writer.sheets["Links"]
+            
+            # Add hyperlinks to URL column (column B, since link_id is column A)
+            for idx, url in enumerate(output_df["url"], start=2):
+                worksheet[f"B{idx}"].hyperlink = url
+                worksheet[f"B{idx}"].style = "Hyperlink"
         
         file_metadata = {
             "name": excel_file,
