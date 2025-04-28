@@ -103,7 +103,7 @@ def login_form():
             username = st.text_input("Username", key="guest_username")
             password = st.text_input("Guest Password", type="password", key="guest_password")
         else:
-            st.info("Click 'Continue as Public User' to access the app without saving to Google Drive.")
+            st.info("🌐 Click 'Continue as Public User' to access the app without saving to Google Drive.")
         
         submit_button = st.form_submit_button("Login", disabled=(mode == "Public"))
         public_button = st.form_submit_button("Continue as Public User", disabled=(mode != "Public"))
