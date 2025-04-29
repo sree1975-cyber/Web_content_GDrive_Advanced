@@ -45,7 +45,12 @@ def apply_css():
         transform: translateX(-50%);
         white-space: nowrap;
     }
-
+    /* Search bar alignment */
+    .search-container {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
     /* Responsive design */
     @media (max-width: 768px) {
         .stForm, .stDataFrame {
@@ -58,8 +63,14 @@ def apply_css():
         .stDataFrame {
             overflow-x: auto;
         }
+        .search-container {
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .stTextInput, .stMultiSelect, .stSelectbox {
+            width: 100% !important;
+        }
     }
-
     /* Debug CSS application */
     .debug-css::after {
         content: "CSS Loaded";
@@ -69,23 +80,6 @@ def apply_css():
     <div class="debug-css"></div>
     """
     st.markdown(css, unsafe_allow_html=True)
-
-    with st.expander("ℹ️ About Web Content Manager", expanded=False):
-        st.markdown("""
-        <div style="padding: 1rem;">
-            <h3>Your Personal Web Library</h3>
-            <p>Web Content Manager helps you save and organize web links with:</p>
-            <ul>
-                <li>📌 One-click saving of important web resources</li>
-                <li>🏷️ <strong>Smart tagging</strong> - Automatically suggests tags from page metadata</li>
-                <li>🔍 <strong>Powerful search</strong> - Full-text search across all fields with tag filtering</li>
-                <li>🗑️ <strong>Delete functionality</strong> - Remove unwanted links</li>
-                <li>📊 <strong>Data Table View</strong> - See all links in a sortable, filterable table</li>
-                <li>📥 <strong>Export capability</strong> - Download your collection in Excel or CSV format</li>
-                <li>💾 <strong>Persistent storage</strong> - Your data is saved automatically and persists between sessions</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
 
 def display_header(mode):
     """Display the app header with mode-specific styling and logout button"""
@@ -118,6 +112,24 @@ def login_form():
         <p class="login-info">Log in as Admin, Guest, or continue as a Public user.</p>
     </div>
     """, unsafe_allow_html=True)
+    
+    # About Web Content Manager expander
+    with st.expander("ℹ️ About Web Content Manager", expanded=False, key="about_expander"):
+        st.markdown("""
+        <div style="padding: 1rem;">
+            <h3>Your Personal Web Library</h3>
+            <p>Web Content Manager helps you save and organize web links with:</p>
+            <ul>
+                <li>📌 One-click saving of important web resources</li>
+                <li>🏷️ <strong>Smart tagging</strong> - Automatically suggests tags from page metadata</li>
+                <li>🔍 <strong>Powerful search</strong> - Full-text search across all fields with tag filtering</li>
+                <li>🗑️ <strong>Delete functionality</strong> - Remove unwanted links</li>
+                <li>📊 <strong>Data Table View</strong> - See all links in a sortable, filterable table</li>
+                <li>📥 <strong>Export capability</strong> - Download your collection in Excel or CSV format</li>
+                <li>💾 <strong>Persistent storage</strong> - Your data is saved automatically and persists between sessions</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
     
     # Initialize login mode in session state
     if "login_mode" not in st.session_state:
@@ -220,7 +232,9 @@ def add_link_section(df, excel_file, mode):
     tab1, tab2 = st.tabs(["Single URL", "Upload Bookmarks"])
     
     with tab1:
-        st.markdown("<h4>Add Single URL</h4>", unsafe_allow_html=True)
+        st.markdown("<h4>Add
+
+ Single URL</h4>", unsafe_allow_html=True)
         
         # Dynamic key for url_input to force reset
         if 'url_input_counter' not in st.session_state:
@@ -439,10 +453,30 @@ def browse_section(df, excel_file, mode):
     df["tags"] = df["tags"].apply(lambda x: str(x) if pd.notnull(x) else "")
     df["is_duplicate"] = df["is_duplicate"].astype(bool)
     
-    search_query = st.text_input("Search Links", placeholder="Enter keywords or tags...")
-    tag_options = sorted(set(','.join(df["tags"].dropna()).split(','))) if not df.empty and "tags" in df.columns else []
-    tag_filter = st.multiselect("Filter by Tags", options=tag_options)
+    # Search and filter inputs in a single row
+    col1, col2, col3 = st.columns([2, 2, 1])
+    with col1:
+        search_query = st.text_input("Search Links", placeholder="Enter keywords or tags...", key="search_query")
+    with col2:
+        tag_options = sorted(set(','.join(df["tags"].dropna()).split(','))) if not df.empty and "tags" in df.columns else []
+        tag_filter = st.multiselect("Filter by Tags", options=tag_options, key="tag_filter")
+    with col3:
+        priority_filter = st.selectbox("Filter by Priority", ["All", "Low", "Medium", "High", "Important"], key="priority_filter")
     
+    # Web search button
+    if st.button("🔍 Search Web", help="Search the web with the query and tags"):
+        if search_query or tag_filter:
+            query = search_query + " " + " ".join(tag_filter) if search_query else " ".join(tag_filter)
+            search_url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
+            st.markdown(f"""
+            <script>
+            window.open("{search_url}", "_blank");
+            </script>
+            """, unsafe_allow_html=True)
+        else:
+            st.warning("⚠️ Please enter a search query or select tags.")
+    
+    # Filter DataFrame
     filtered_df = df.copy()
     if search_query:
         filtered_df = filtered_df[
@@ -453,7 +487,10 @@ def browse_section(df, excel_file, mode):
         ]
     if tag_filter:
         filtered_df = filtered_df[filtered_df["tags"].str.contains('|'.join(tag_filter), case=False, na=False)]
+    if priority_filter != "All":
+        filtered_df = filtered_df[filtered_df["priority"] == priority_filter]
     
+    # Sort by priority and number
     priority_order = {"Important": 0, "High": 1, "Medium": 2, "Low": 3}
     if not filtered_df.empty:
         filtered_df["priority_order"] = filtered_df["priority"].map(priority_order)
