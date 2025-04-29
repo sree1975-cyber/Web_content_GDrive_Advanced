@@ -232,9 +232,7 @@ def add_link_section(df, excel_file, mode):
     tab1, tab2 = st.tabs(["Single URL", "Upload Bookmarks"])
     
     with tab1:
-        st.markdown("<h4>Add
-
- Single URL</h4>", unsafe_allow_html=True)
+        st.markdown("<h4>Add Single URL</h4>", unsafe_allow_html=True)
         
         # Dynamic key for url_input to force reset
         if 'url_input_counter' not in st.session_state:
@@ -473,6 +471,7 @@ def browse_section(df, excel_file, mode):
             window.open("{search_url}", "_blank");
             </script>
             """, unsafe_allow_html=True)
+            logging.debug(f"Web search triggered: URL={search_url}")
         else:
             st.warning("⚠️ Please enter a search query or select tags.")
     
@@ -483,7 +482,7 @@ def browse_section(df, excel_file, mode):
             filtered_df["title"].str.contains(search_query, case=False, na=False) |
             filtered_df["description"].str.contains(search_query, case=False, na=False) |
             filtered_df["url"].str.contains(search_query, case=False, na=False) |
-            filtered_df["tags"].str.contains(search_query, case=False, na=False)
+            filtered_df["tags"].str.contains(search_query,(keyword or tags case=False, na=False)
         ]
     if tag_filter:
         filtered_df = filtered_df[filtered_df["tags"].str.contains('|'.join(tag_filter), case=False, na=False)]
