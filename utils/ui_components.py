@@ -189,7 +189,7 @@ def login_form():
     
     try:
         logging.debug("Attempting to render About Web Content Manager expander")
-        with st.expander("About Web Content Manager", expanded=False):
+        with st.expander("ℹ️ About Web Content Manager", expanded=False):
             st.markdown("""
             <div style="padding: 1rem;">
                 <h3>Your Personal Web Library</h3>
