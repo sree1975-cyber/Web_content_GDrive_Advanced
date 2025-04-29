@@ -86,5 +86,5 @@ def main():
         with tab_objects[3]:
             analytics_section(st.session_state.get("df"))
 
-   if __name__ == "__main__":
-    main()
+    if __name__ == "__main__":
+     main()
