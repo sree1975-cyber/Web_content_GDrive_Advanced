@@ -149,6 +149,7 @@ def display_header(mode):
         layout_label = "Switch to Mobile View" if st.session_state['layout_mode'] == 'desktop' else "Switch to Desktop View"
         if st.button(layout_label, help="Toggle between mobile and desktop layouts"):
             st.session_state['layout_mode'] = 'mobile' if st.session_state['layout_mode'] == 'desktop' else 'desktop'
+            logging.debug(f"Layout toggled to: {st.session_state['layout_mode']}")
             st.rerun()
 
 def login_form():
@@ -315,260 +316,13 @@ def add_link_section(df, excel_file, mode):
                     st.session_state['metadata_fetched'] = True
                 st.rerun()
         
-        with st.form("single_url_form", clear_on_submit=True):
-            url = st.text_input(
-                "URL (Confirm)*",
-                value=st.session_state.get(url_input_key, ''),
-                key="url_form_input",
-                help="Confirm the URL to save"
-            )
-            
-            title = st.text_input(
-                "Title*",
-                value=st.session_state.get('auto_title', ''),
-                help="Give your link a descriptive title",
-                key="title_input"
-            )
-            
-            description = st.text_area(
-                "Description",
-                value=st.session_state.get('auto_description', ''),
-                height=100,
-                help="Add notes about why this link is important",
-                key="description_input"
-            )
-            
-            all_tags = []
-            if 'tags' in working_df.columns:
-                all_tags = sorted({str(tag).strip() for tags in working_df['tags']
-                                 for tag in (tags.split(',') if isinstance(tags, str) else [str(tags)])
-                                 if str(tag).strip()})
-            default_tags = ['News', 'Shopping', 'Research', 'Entertainment', 'Cloud', 'Education', 'Other']
-            suggested_tags = st.session_state.get('suggested_tags', [])
-            all_tags = sorted(list(set(all_tags + default_tags + [str(tag).strip() for tag in suggested_tags if str(tag).strip()])))
-            
-            logging.debug(f"Rendering multiselect: suggested_tags={suggested_tags}, all_tags={all_tags}")
-            
-            selected_tags = st.multiselect(
-                "Tags",
-                options=all_tags,
-                default=suggested_tags if suggested_tags else [],
-                help="Select existing tags or add new ones below.",
-                key=f"existing_tags_input_{st.session_state.get('url_input_counter', 0)}"
-            )
-            
-            new_tag = st.text_input(
-                "Add New Tag (optional)",
-                placeholder="Type a new tag and press Enter",
-                help="Enter a new tag to add to the selected tags",
-                key="new_tag_input"
-            )
-            
-            tags = ','.join(selected_tags + ([new_tag.strip()] if new_tag.strip() else []))
-            
-            priority = st.selectbox(
-                "Priority",
-                ["Low", "Medium", "High", "Important"],
-                index=0,
-                key="priority_input"
-            )
-            
-            number = st.number_input(
-                "Number (for grouping)",
-                min_value=0,
-                value=0,
-                step=1,
-                key="number_input"
-            )
-            
-            submitted = st.form_submit_button("💾 Save Link", help="Save the link to your collection")
-            
-            if submitted:
-                logging.debug(f"Form submitted: URL={url}, Title={title}, Description={description}, Tags={tags}, Priority={priority}, Number={number}, Mode={mode}")
-                if not url:
-                    st.error("❌ Please enter a URL")
-                elif not title:
-                    st.error("❌ Please enter a title")
-                else:
-                    new_df = save_link(working_df, url, title, description, tags, priority, number, mode)
-                    if new_df is not None:
-                        if mode in ["admin", "guest"] and excel_file:
-                            folder_id = st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "")
-                            if save_data(new_df, excel_file, folder_id):
-                                st.session_state['df'] = new_df
-                                st.success("✅ Link saved successfully!")
-                                if new_df.iloc[-1]["is_duplicate"]:
-                                    st.warning("⚠️ This URL is a duplicate.")
-                                st.balloons()
-                                time.sleep(0.5)
-                                st.session_state['clear_url'] = True
-                                st.session_state['url_input_counter'] += 1
-                                for key in ['auto_title', 'auto_description', 'suggested_tags', 'metadata_fetched']:
-                                    st.session_state.pop(key, None)
-                                st.rerun()
-                            else:
-                                st.error("❌ Failed to save link to Google Drive")
-                        else:
-                            st.session_state['user_df'] = new_df
-                            st.success("✅ Link saved successfully! Download your links as they are temporary.")
-                            if new_df.iloc[-1]["is_duplicate"]:
-                                st.warning("⚠️ This URL is a duplicate.")
-                            st.balloons()
-                            time.sleep(0.5)
-                            st.session_state['clear_url'] = True
-                            st.session_state['url_input_counter'] += 1
-                            for key in ['auto_title', 'auto_description', 'suggested_tags', 'metadata_fetched']:
-                                st.session_state.pop(key, None)
-                            st.rerun()
-                    else:
-                        st.error("❌ Failed to process link")
-
-    with tab2:
-        st.markdown("<h4>Upload Browser Bookmarks</h4>", unsafe_allow_html=True)
-        with st.form(key="upload_bookmarks_form", clear_on_submit=True):
-            uploaded_file = st.file_uploader(
-                "Upload Bookmarks (Excel, CSV, HTML)",
-                type=["xlsx", "csv", "html"],
-                key="bookmark_uploader"
-            )
-            duplicate_action = st.selectbox(
-                "Handle Duplicates",
-                ["Keep Both", "Skip  ["Admin", "Guest", "Public"],
-                index=["Admin", "Guest", "Public"].index(st.session_state["login_mode"]),
-                key="login_mode_radio"
-            )
-    
-    # Update session state when mode changes
-    if mode != st.session_state["login_mode"]:
-        st.session_state["login_mode"] = mode
-        # Clear previous form inputs to avoid stale data
-        for key in ["admin_password", "guest_username", "guest_password"]:
-            if key in st.session_state:
-                del st.session_state[key]
-        logging.debug(f"Login mode changed to: {mode}")
-        st.rerun()
-    
-    # Render appropriate form or button based on mode
-    if mode == "Admin":
-        with st.form(key="admin_login_form", clear_on_submit=False):
-            password = st.text_input("Admin Password", type="password", key="admin_password")
-            submit_button = st.form_submit_button("Login")
-            
-            if submit_button:
-                if password == "admin@123":
-                    st.session_state["mode"] = "admin"
-                    st.session_state["username"] = None
-                    logging.debug("Admin login successful")
-                    st.success("✅ Logged in as Admin!")
-                    st.balloons()
-                    time.sleep(0.5)
-                    st.rerun()
-                else:
-                    st.error("❌ Incorrect Admin password. Please try again.")
-    
-    elif mode == "Guest":
-        with st.form(key="guest_login_form", clear_on_submit=False):
-            username = st.text_input("Username", key="guest_username")
-            password = st.text_input("Guest Password", type="password", key="guest_password")
-            submit_button = st.form_submit_button("Login")
-            
-            if submit_button:
-                if password == "guest@456" and username:
-                    st.session_state["mode"] = "guest"
-                    st.session_state["username"] = username
-                    logging.debug(f"Guest login: username={username}, session_state_username={st.session_state['username']}")
-                    st.success(f"✅ Logged in as Guest ({username})!")
-                    st.balloons()
-                    time.sleep(0.5)
-                    st.rerun()
-                elif not username:
-                    st.error("❌ Username is required for Guest mode.")
-                else:
-                    st.error("❌ Incorrect Guest password. Please try again.")
-    
-    else:  # Public mode
-        if st.button("👥 Continue as Public User"):
-            st.session_state["mode"] = "public"
-            st.session_state["username"] = None
-            logging.debug("Public login successful")
-            st.success("✅ Continuing as Public User!")
-            st.balloons()
-            time.sleep(0.5)
+        # Debug button for session state
+        if st.button("Clear Session State (Debug)", help="Reset session state for testing"):
+            for key in list(st.session_state.keys()):
+                st.session_state[key] = None
+            logging.debug("Session state cleared")
             st.rerun()
-
-def add_link_section(df, excel_file, mode):
-    """Section for adding new links or uploading bookmark files"""
-    apply_css(is_mobile=st.session_state.get('layout_mode', 'desktop') == 'mobile')
-    st.markdown("<h3>🌐 Add New Link or Upload Bookmarks</h3>", unsafe_allow_html=True)
-    
-    # Initialize user DataFrame for public mode with all required columns
-    required_columns = [
-        "link_id", "url", "title", "description", "tags",
-        "created_at", "updated_at", "priority", "number", "is_duplicate"
-    ]
-    if mode == "public" and 'user_df' not in st.session_state:
-        st.session_state['user_df'] = pd.DataFrame(columns=required_columns)
-    
-    # Determine the DataFrame to use
-    working_df = st.session_state['user_df'] if mode == "public" else df
-    
-    # Ensure all required columns exist
-    for col in required_columns:
-        if col not in working_df.columns:
-            if col == "tags":
-                working_df[col] = ""
-            elif col == "is_duplicate":
-                working_df[col] = False
-            elif col == "link_id":
-                working_df[col] = [str(uuid.uuid4()) for _ in range(len(working_df))]
-            else:
-                working_df[col] = ""
-    
-    tab1, tab2 = st.tabs(["Single URL", "Upload Bookmarks"])
-    
-    with tab1:
-        st.markdown("<h4>Add Single URL</h4>", unsafe_allow_html=True)
         
-        # Dynamic key for url_input to force reset
-        if 'url_input_counter' not in st.session_state:
-            st.session_state['url_input_counter'] = 0
-        url_input_key = f"url_input_{st.session_state['url_input_counter']}"
-        
-        # Clear URL field if signaled
-        url_value = '' if st.session_state.get('clear_url', False) else st.session_state.get(url_input_key, '')
-        
-        # Fetch Metadata button
-        url_temp = st.text_input(
-            "URL*",
-            value=url_value,
-            placeholder="https://example.com",
-            key=url_input_key,
-            help="Enter the full URL including https://"
-        )
-        
-        is_url_valid = url_temp.startswith(("http://", "https://")) if url_temp else False
-        
-        if st.button("Fetch Metadata", disabled=not is_url_valid, key="fetch_metadata"):
-            with st.spinner("Fetching metadata..."):
-                try:
-                    metadata = fetch_metadata(url_temp)
-                    st.session_state['auto_title'] = metadata.get("title", "")
-                    st.session_state['auto_description'] = metadata.get("description", "")
-                    st.session_state['suggested_tags'] = metadata.get("tags", [])
-                    logging.debug(f"Fetched metadata for {url_temp}: title={st.session_state['auto_title']}, description={st.session_state['auto_description']}, tags={st.session_state['suggested_tags']}")
-                    st.session_state['clear_url'] = False
-                    st.session_state['metadata_fetched'] = True  # Flag to trigger rerun
-                    st.info("✅ Metadata fetched! Fields updated.")
-                    if not st.session_state['suggested_tags']:
-                        st.warning("⚠️ No tags found in page metadata. Please select existing tags or add new ones.")
-                except Exception as e:
-                    st.error(f"❌ Failed to fetch metadata: {str(e)}")
-                    logging.error(f"Metadata fetch failed for {url_temp}: {str(e)}")
-                    st.session_state['suggested_tags'] = []
-                    st.session_state['metadata_fetched'] = True
-                st.rerun()  # Force rerun to update multiselect
-
-        # Form for saving link
         with st.form("single_url_form", clear_on_submit=True):
             url = st.text_input(
                 "URL (Confirm)*",
@@ -592,7 +346,6 @@ def add_link_section(df, excel_file, mode):
                 key="description_input"
             )
             
-            # Get all unique tags from DataFrame with fallback
             all_tags = []
             if 'tags' in working_df.columns:
                 all_tags = sorted({str(tag).strip() for tags in working_df['tags']
@@ -602,7 +355,6 @@ def add_link_section(df, excel_file, mode):
             suggested_tags = st.session_state.get('suggested_tags', [])
             all_tags = sorted(list(set(all_tags + default_tags + [str(tag).strip() for tag in suggested_tags if str(tag).strip()])))
             
-            # Log tags for debugging
             logging.debug(f"Rendering multiselect: suggested_tags={suggested_tags}, all_tags={all_tags}")
             
             selected_tags = st.multiselect(
@@ -637,7 +389,6 @@ def add_link_section(df, excel_file, mode):
                 key="number_input"
             )
             
-            # Ensure submit button is present
             submitted = st.form_submit_button("💾 Save Link", help="Save the link to your collection")
             
             if submitted:
@@ -833,6 +584,15 @@ def browse_section(df, excel_file, mode):
             st.error(f"❌ Failed to display data table: {str(e)}")
             logging.error(f"Data editor failed: {str(e)}")
             return
+        
+        # Debug button to show link_ids
+        if st.button("Show Link IDs (Debug)", help="Display link_ids for selected rows"):
+            selected_indices = edited_df[edited_df["delete"] == True].index
+            if not selected_indices.empty:
+                selected_link_ids = filtered_df.iloc[selected_indices]["link_id"].tolist()
+                st.write(f"Selected link_ids: {selected_link_ids}")
+            else:
+                st.write("No rows selected")
         
         # Show delete button only if at least one checkbox is checked
         if "delete" in edited_df.columns and edited_df["delete"].any():
