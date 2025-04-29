@@ -131,7 +131,7 @@ def login_form():
             submit_button = st.form_submit_button("Login")
             
             if submit_button:
-                if password == "admin123":
+                if password == "admin@123":
                     st.session_state["mode"] = "admin"
                     st.session_state["username"] = None
                     logging.debug("Admin login successful")
@@ -149,7 +149,7 @@ def login_form():
             submit_button = st.form_submit_button("Login")
             
             if submit_button:
-                if password == "guest456" and username:
+                if password == "guest@456" and username:
                     st.session_state["mode"] = "guest"
                     st.session_state["username"] = username
                     logging.debug(f"Guest login: username={username}, session_state_username={st.session_state['username']}")
