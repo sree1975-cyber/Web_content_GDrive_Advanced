@@ -10,6 +10,9 @@ from openpyxl.styles import PatternFill, Font, Alignment
 import time
 import uuid
 
+# Log Streamlit version for debugging
+logging.debug(f"Streamlit version: {st.__version__}")
+
 def apply_css():
     """Apply CSS for consistent color scheme across the app"""
     css = """
@@ -50,6 +53,20 @@ def apply_css():
         display: flex;
         gap: 1rem;
         margin-bottom: 1rem;
+    }
+    /* Public warning box */
+    .public-warning {
+        background-color: #FFF3CD;
+        border: 2px solid #FFC107;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        text-align: center;
+        animation: fadeIn 1s ease-in;
+    }
+    @keyframes fadeIn {
+        0% { opacity: 0; }
+        100% { opacity: 1; }
     }
     /* Responsive design */
     @media (max-width: 768px) {
@@ -113,23 +130,29 @@ def login_form():
     </div>
     """, unsafe_allow_html=True)
     
-    # About Web Content Manager expander
-    with st.expander("ℹ️ About Web Content Manager", expanded=False, key="about_expander"):
-        st.markdown("""
-        <div style="padding: 1rem;">
-            <h3>Your Personal Web Library</h3>
-            <p>Web Content Manager helps you save and organize web links with:</p>
-            <ul>
-                <li>📌 One-click saving of important web resources</li>
-                <li>🏷️ <strong>Smart tagging</strong> - Automatically suggests tags from page metadata</li>
-                <li>🔍 <strong>Powerful search</strong> - Full-text search across all fields with tag filtering</li>
-                <li>🗑️ <strong>Delete functionality</strong> - Remove unwanted links</li>
-                <li>📊 <strong>Data Table View</strong> - See all links in a sortable, filterable table</li>
-                <li>📥 <strong>Export capability</strong> - Download your collection in Excel or CSV format</li>
-                <li>💾 <strong>Persistent storage</strong> - Your data is saved automatically and persists between sessions</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
+    # About Web Content Manager expander with try-catch
+    try:
+        logging.debug("Attempting to render About Web Content Manager expander")
+        with st.expander("About Web Content Manager", expanded=False):
+            st.markdown("""
+            <div style="padding: 1rem;">
+                <h3>Your Personal Web Library</h3>
+                <p>Web Content Manager helps you save and organize web links with:</p>
+                <ul>
+                    <li>📌 One-click saving of important web resources</li>
+                    <li>🏷️ <strong>Smart tagging</strong> - Automatically suggests tags from page metadata</li>
+                    <li>🔍 <strong>Powerful search</strong> - Full-text search across all fields with tag filtering</li>
+                    <li>🗑️ <strong>Delete functionality</strong> - Remove unwanted links</li>
+                    <li>📊 <strong>Data Table View</strong> - See all links in a sortable, filterable table</li>
+                    <li>📥 <strong>Export capability</strong> - Download your collection in Excel or CSV format</li>
+                    <li>💾 <strong>Persistent storage</strong> - Your data is saved automatically and persists between sessions</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
+        logging.debug("Expander rendered successfully")
+    except Exception as e:
+        st.error("❌ Failed to render About expander. Please try again or contact support.")
+        logging.error(f"Expander failed: {str(e)}")
     
     # Initialize login mode in session state
     if "login_mode" not in st.session_state:
@@ -254,14 +277,25 @@ def add_link_section(df, excel_file, mode):
         is_url_valid = url_temp.startswith(("http://", "https://")) if url_temp else False
         
         if st.button("Fetch Metadata", disabled=not is_url_valid, key="fetch_metadata"):
-            with st.spinner("Fetching..."):
-                metadata = fetch_metadata(url_temp)
-                st.session_state['auto_title'] = metadata.get("title", "")
-                st.session_state['auto_description'] = metadata.get("description", "")
-                st.session_state['suggested_tags'] = metadata.get("tags", [])
-                st.session_state['clear_url'] = False
-                st.info("✅ Metadata fetched! Fields updated.")
-        
+            with st.spinner("Fetching metadata..."):
+                try:
+                    metadata = fetch_metadata(url_temp)
+                    st.session_state['auto_title'] = metadata.get("title", "")
+                    st.session_state['auto_description'] = metadata.get("description", "")
+                    st.session_state['suggested_tags'] = metadata.get("tags", [])
+                    logging.debug(f"Fetched metadata for {url_temp}: title={st.session_state['auto_title']}, description={st.session_state['auto_description']}, tags={st.session_state['suggested_tags']}")
+                    st.session_state['clear_url'] = False
+                    st.session_state['metadata_fetched'] = True  # Flag to trigger rerun
+                    st.info("✅ Metadata fetched! Fields updated.")
+                    if not st.session_state['suggested_tags']:
+                        st.warning("⚠️ No tags found in page metadata. Please select existing tags or add new ones.")
+                except Exception as e:
+                    st.error(f"❌ Failed to fetch metadata: {str(e)}")
+                    logging.error(f"Metadata fetch failed for {url_temp}: {str(e)}")
+                    st.session_state['suggested_tags'] = []
+                    st.session_state['metadata_fetched'] = True
+                st.rerun()  # Force rerun to update multiselect
+
         # Form for saving link
         with st.form("single_url_form", clear_on_submit=True):
             url = st.text_input(
@@ -292,14 +326,17 @@ def add_link_section(df, excel_file, mode):
                 all_tags = sorted({str(tag).strip() for tags in working_df['tags']
                                  for tag in (tags.split(',') if isinstance(tags, str) else [str(tags)])
                                  if str(tag).strip()})
-            suggested_tags = st.session_state.get('suggested_tags', []) + \
-                           ['News', 'Shopping', 'Research', 'Entertainment', 'Cloud', 'Education', 'Other']
-            all_tags = sorted(list(set(all_tags + [str(tag).strip() for tag in suggested_tags if str(tag).strip()])))
+            default_tags = ['News', 'Shopping', 'Research', 'Entertainment', 'Cloud', 'Education', 'Other']
+            suggested_tags = st.session_state.get('suggested_tags', [])
+            all_tags = sorted(list(set(all_tags + default_tags + [str(tag).strip() for tag in suggested_tags if str(tag).strip()])))
+            
+            # Log tags for debugging
+            logging.debug(f"Rendering multiselect: suggested_tags={suggested_tags}, all_tags={all_tags}")
             
             selected_tags = st.multiselect(
                 "Tags",
                 options=all_tags,
-                default=[],
+                default=suggested_tags if suggested_tags else [],
                 help="Select existing tags or add new ones below.",
                 key="existing_tags_input"
             )
@@ -351,7 +388,7 @@ def add_link_section(df, excel_file, mode):
                                 time.sleep(0.5)
                                 st.session_state['clear_url'] = True
                                 st.session_state['url_input_counter'] += 1
-                                for key in ['auto_title', 'auto_description', 'suggested_tags']:
+                                for key in ['auto_title', 'auto_description', 'suggested_tags', 'metadata_fetched']:
                                     st.session_state.pop(key, None)
                                 st.rerun()
                             else:
@@ -365,7 +402,7 @@ def add_link_section(df, excel_file, mode):
                             time.sleep(0.5)
                             st.session_state['clear_url'] = True
                             st.session_state['url_input_counter'] += 1
-                            for key in ['auto_title', 'auto_description', 'suggested_tags']:
+                            for key in ['auto_title', 'auto_description', 'suggested_tags', 'metadata_fetched']:
                                 st.session_state.pop(key, None)
                             st.rerun()
                     else:
@@ -482,7 +519,7 @@ def browse_section(df, excel_file, mode):
             filtered_df["title"].str.contains(search_query, case=False, na=False) |
             filtered_df["description"].str.contains(search_query, case=False, na=False) |
             filtered_df["url"].str.contains(search_query, case=False, na=False) |
-            filtered_df["tags"].str.contains(search_query,(keyword or tags case=False, na=False)
+            filtered_df["tags"].str.contains(search_query, case=False, na=False)
         ]
     if tag_filter:
         filtered_df = filtered_df[filtered_df["tags"].str.contains('|'.join(tag_filter), case=False, na=False)]
@@ -519,14 +556,17 @@ def browse_section(df, excel_file, mode):
                 use_container_width=True,
                 disabled=["url", "title", "description", "tags", "priority", "number", "is_duplicate"]
             )
+            logging.debug(f"Data editor rendered, delete column exists: {'delete' in edited_df.columns}")
         except Exception as e:
             st.error(f"❌ Failed to display data table: {str(e)}")
             logging.error(f"Data editor failed: {str(e)}")
             return
         
-        if st.button("🗑️ Delete Selected Links", help="Delete selected links"):
-            try:
-                if "delete" in edited_df.columns:
+        # Show delete button only if at least one checkbox is checked
+        if "delete" in edited_df.columns and edited_df["delete"].any():
+            logging.debug(f"Delete button visible: {edited_df['delete'].sum()} rows selected")
+            if st.button("🗑️ Delete Selected Links", help="Delete selected links"):
+                try:
                     selected_indices = edited_df[edited_df["delete"] == True].index
                     if not selected_indices.empty:
                         selected_link_ids = filtered_df.iloc[selected_indices]["link_id"].tolist()
@@ -542,11 +582,11 @@ def browse_section(df, excel_file, mode):
                         st.rerun()
                     else:
                         st.error("❌ Please select at least one link to delete.")
-                else:
-                    st.error("❌ Deletion column not found.")
-            except Exception as e:
-                st.error(f"❌ Failed to delete links: {str(e)}")
-                logging.error(f"Delete links failed: {str(e)}")
+                except Exception as e:
+                    st.error(f"❌ Failed to delete links: {str(e)}")
+                    logging.error(f"Delete links failed: {str(e)}")
+        else:
+            logging.debug("Delete button hidden: no rows selected for deletion")
     
     if filtered_df.empty:
         st.info("No links match the search criteria.")
