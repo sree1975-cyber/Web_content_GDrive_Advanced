@@ -7,6 +7,9 @@ import logging
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
+# Set page config for wide layout
+st.set_page_config(page_title="Web Content Manager", layout="wide")
+
 def main():
     # Initialize session state
     if "mode" not in st.session_state:
