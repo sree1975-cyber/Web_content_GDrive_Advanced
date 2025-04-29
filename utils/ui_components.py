@@ -13,8 +13,8 @@ import uuid
 # Log Streamlit version for debugging
 logging.debug(f"Streamlit version: {st.__version__}")
 
-def apply_css():
-    """Apply CSS for consistent color scheme across the app"""
+def apply_css(is_mobile=False):
+    """Apply CSS for consistent color scheme, with mobile/desktop toggle"""
     css = """
     <style>
     /* Base styles */
@@ -23,11 +23,11 @@ def apply_css():
         border-radius: 8px;
         margin-bottom: 1rem;
     }
-    .header-admin { background-color: #7a97e8 !important; } /* Light blue for admin */
-    .header-guest { background-color: #F0FFFF !important; } /* Light parrot green for guest */
-    .header-public { background-color: #CCCCFF !important; } /* Light purple for public */
+    .header-admin { background-color: #7a97e8 !important; }
+    .header-guest { background-color: #F0FFFF !important; }
+    .header-public { background-color: #CCCCFF !important; }
     .login-container {
-        background-color: #DA70D6 !important; /* Orchid */
+        background-color: #DA70D6 !important;
         padding: 2rem;
         border-radius: 8px;
         text-align: center;
@@ -68,8 +68,27 @@ def apply_css():
         0% { opacity: 0; }
         100% { opacity: 1; }
     }
-    /* Responsive design */
-    @media (max-width: 768px) {
+    /* Desktop styles */
+    .stForm, .stDataFrame {
+        font-size: 16px;
+    }
+    .stButton > button {
+        margin-bottom: 0.5rem;
+    }
+    .stDataFrame {
+        width: 100%;
+    }
+    .search-container {
+        flex-direction: row;
+        gap: 1rem;
+    }
+    .stTextInput, .stMultiSelect, .stSelectbox {
+        width: auto;
+    }
+    /* Mobile styles */
+    """
+    if is_mobile:
+        css += """
         .stForm, .stDataFrame {
             font-size: 14px;
         }
@@ -87,8 +106,9 @@ def apply_css():
         .stTextInput, .stMultiSelect, .stSelectbox {
             width: 100% !important;
         }
-    }
-    /* Debug CSS application */
+        """
+    css += """
+    /* Debug CSS */
     .debug-css::after {
         content: "CSS Loaded";
         display: none;
@@ -99,11 +119,15 @@ def apply_css():
     st.markdown(css, unsafe_allow_html=True)
 
 def display_header(mode):
-    """Display the app header with mode-specific styling and logout button"""
-    apply_css()  # Ensure CSS is applied
+    """Display the app header with mode-specific styling, logout button, and layout toggle"""
+    if 'layout_mode' not in st.session_state:
+        st.session_state['layout_mode'] = 'desktop'
+    
+    apply_css(is_mobile=st.session_state['layout_mode'] == 'mobile')
+    
     header_class = f"header-{mode}"
     username = st.session_state.get("username")
-    logging.debug(f"Displaying header: mode={mode}, username={username}")
+    logging.debug(f"Displaying header: mode={mode}, username={username}, layout={st.session_state['layout_mode']}")
     st.markdown(f"""
     <div class="{header_class}">
         <h1 style="margin: 0;">Web Content Manager</h1>
@@ -112,17 +136,24 @@ def display_header(mode):
     </div>
     """, unsafe_allow_html=True)
     
-    if st.button("🚪 Logout", help="Log out and return to login screen"):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.success("✅ Logged out successfully!")
-        st.snow()
-        time.sleep(2)
-        st.rerun()
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("🚪 Logout", help="Log out and return to login screen"):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.success("✅ Logged out successfully!")
+            st.snow()
+            time.sleep(2)
+            st.rerun()
+    with col2:
+        layout_label = "Switch to Mobile View" if st.session_state['layout_mode'] == 'desktop' else "Switch to Desktop View"
+        if st.button(layout_label, help="Toggle between mobile and desktop layouts"):
+            st.session_state['layout_mode'] = 'mobile' if st.session_state['layout_mode'] == 'desktop' else 'desktop'
+            st.rerun()
 
 def login_form():
     """Display login form for Admin, Guest, or Public access"""
-    apply_css()  # Ensure CSS is applied
+    apply_css()  # Default to desktop
     st.markdown("""
     <div class="login-container">
         <h2 class="login-title">Welcome to Web Content Manager</h2>
@@ -130,7 +161,6 @@ def login_form():
     </div>
     """, unsafe_allow_html=True)
     
-    # About Web Content Manager expander with try-catch
     try:
         logging.debug("Attempting to render About Web Content Manager expander")
         with st.expander("About Web Content Manager", expanded=False):
@@ -154,17 +184,259 @@ def login_form():
         st.error("❌ Failed to render About expander. Please try again or contact support.")
         logging.error(f"Expander failed: {str(e)}")
     
-    # Initialize login mode in session state
     if "login_mode" not in st.session_state:
         st.session_state["login_mode"] = "Admin"
     
-    # Radio button outside form for dynamic updates
     mode = st.radio(
         "Select Login Type",
         ["Admin", "Guest", "Public"],
         index=["Admin", "Guest", "Public"].index(st.session_state["login_mode"]),
         key="login_mode_radio"
     )
+    
+    if mode != st.session_state["login_mode"]:
+        st.session_state["login_mode"] = mode
+        for key in ["admin_password", "guest_username", "guest_password"]:
+            if key in st.session_state:
+                del st.session_state[key]
+        logging.debug(f"Login mode changed to: {mode}")
+        st.rerun()
+    
+    if mode == "Admin":
+        with st.form(key="admin_login_form", clear_on_submit=False):
+            password = st.text_input("Admin Password", type="password", key="admin_password")
+            submit_button = st.form_submit_button("Login")
+            
+            if submit_button:
+                if password == "admin@123":
+                    st.session_state["mode"] = "admin"
+                    st.session_state["username"] = None
+                    logging.debug("Admin login successful")
+                    st.success("✅ Logged in as Admin!")
+                    st.balloons()
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.error("❌ Incorrect Admin password. Please try again.")
+    
+    elif mode == "Guest":
+        with st.form(key="guest_login_form", clear_on_submit=False):
+            username = st.text_input("Username", key="guest_username")
+            password = st.text_input("Guest Password", type="password", key="guest_password")
+            submit_button = st.form_submit_button("Login")
+            
+            if submit_button:
+                if password == "guest@456" and username:
+                    st.session_state["mode"] = "guest"
+                    st.session_state["username"] = username
+                    logging.debug(f"Guest login: username={username}, session_state_username={st.session_state['username']}")
+                    st.success(f"✅ Logged in as Guest ({username})!")
+                    st.balloons()
+                    time.sleep(0.5)
+                    st.rerun()
+                elif not username:
+                    st.error("❌ Username is required for Guest mode.")
+                else:
+                    st.error("❌ Incorrect Guest password. Please try again.")
+    
+    else:
+        if st.button("👥 Continue as Public User"):
+            st.session_state["mode"] = "public"
+            st.session_state["username"] = None
+            logging.debug("Public login successful")
+            st.success("✅ Continuing as Public User!")
+            st.balloons()
+            time.sleep(0.5)
+            st.rerun()
+
+def add_link_section(df, excel_file, mode):
+    """Section for adding new links or uploading bookmark files"""
+    apply_css(is_mobile=st.session_state.get('layout_mode', 'desktop') == 'mobile')
+    st.markdown("<h3>🌐 Add New Link or Upload Bookmarks</h3>", unsafe_allow_html=True)
+    
+    required_columns = [
+        "link_id", "url", "title", "description", "tags",
+        "created_at", "updated_at", "priority", "number", "is_duplicate"
+    ]
+    if mode == "public" and 'user_df' not in st.session_state:
+        st.session_state['user_df'] = pd.DataFrame(columns=required_columns)
+    
+    working_df = st.session_state['user_df'] if mode == "public" else df
+    
+    for col in required_columns:
+        if col not in working_df.columns:
+            if col == "tags":
+                working_df[col] = ""
+            elif col == "is_duplicate":
+                working_df[col] = False
+            elif col == "link_id":
+                working_df[col] = [str(uuid.uuid4()) for _ in range(len(working_df))]
+            else:
+                working_df[col] = ""
+    
+    tab1, tab2 = st.tabs(["Single URL", "Upload Bookmarks"])
+    
+    with tab1:
+        st.markdown("<h4>Add Single URL</h4>", unsafe_allow_html=True)
+        
+        if 'url_input_counter' not in st.session_state:
+            st.session_state['url_input_counter'] = 0
+        url_input_key = f"url_input_{st.session_state['url_input_counter']}"
+        
+        url_value = '' if st.session_state.get('clear_url', False) else st.session_state.get(url_input_key, '')
+        
+        url_temp = st.text_input(
+            "URL*",
+            value=url_value,
+            placeholder="https://example.com",
+            key=url_input_key,
+            help="Enter the full URL including https://"
+        )
+        
+        is_url_valid = url_temp.startswith(("http://", "https://")) if url_temp else False
+        
+        if st.button("Fetch Metadata", disabled=not is_url_valid, key="fetch_metadata"):
+            with st.spinner("Fetching metadata..."):
+                try:
+                    metadata = fetch_metadata(url_temp)
+                    st.session_state['auto_title'] = metadata.get("title", "")
+                    st.session_state['auto_description'] = metadata.get("description", "")
+                    st.session_state['suggested_tags'] = metadata.get("tags", [])
+                    logging.debug(f"Fetched metadata for {url_temp}: title={st.session_state['auto_title']}, description={st.session_state['auto_description']}, tags={st.session_state['suggested_tags']}")
+                    st.session_state['clear_url'] = False
+                    st.session_state['metadata_fetched'] = True
+                    st.info("✅ Metadata fetched! Fields updated.")
+                    if not st.session_state['suggested_tags']:
+                        st.warning("⚠️ No tags found in page metadata. Please select existing tags or add new ones.")
+                except Exception as e:
+                    st.error(f"❌ Failed to fetch metadata: {str(e)}")
+                    logging.error(f"Metadata fetch failed for {url_temp}: {str(e)}")
+                    st.session_state['suggested_tags'] = []
+                    st.session_state['metadata_fetched'] = True
+                st.rerun()
+        
+        with st.form("single_url_form", clear_on_submit=True):
+            url = st.text_input(
+                "URL (Confirm)*",
+                value=st.session_state.get(url_input_key, ''),
+                key="url_form_input",
+                help="Confirm the URL to save"
+            )
+            
+            title = st.text_input(
+                "Title*",
+                value=st.session_state.get('auto_title', ''),
+                help="Give your link a descriptive title",
+                key="title_input"
+            )
+            
+            description = st.text_area(
+                "Description",
+                value=st.session_state.get('auto_description', ''),
+                height=100,
+                help="Add notes about why this link is important",
+                key="description_input"
+            )
+            
+            all_tags = []
+            if 'tags' in working_df.columns:
+                all_tags = sorted({str(tag).strip() for tags in working_df['tags']
+                                 for tag in (tags.split(',') if isinstance(tags, str) else [str(tags)])
+                                 if str(tag).strip()})
+            default_tags = ['News', 'Shopping', 'Research', 'Entertainment', 'Cloud', 'Education', 'Other']
+            suggested_tags = st.session_state.get('suggested_tags', [])
+            all_tags = sorted(list(set(all_tags + default_tags + [str(tag).strip() for tag in suggested_tags if str(tag).strip()])))
+            
+            logging.debug(f"Rendering multiselect: suggested_tags={suggested_tags}, all_tags={all_tags}")
+            
+            selected_tags = st.multiselect(
+                "Tags",
+                options=all_tags,
+                default=suggested_tags if suggested_tags else [],
+                help="Select existing tags or add new ones below.",
+                key=f"existing_tags_input_{st.session_state.get('url_input_counter', 0)}"
+            )
+            
+            new_tag = st.text_input(
+                "Add New Tag (optional)",
+                placeholder="Type a new tag and press Enter",
+                help="Enter a new tag to add to the selected tags",
+                key="new_tag_input"
+            )
+            
+            tags = ','.join(selected_tags + ([new_tag.strip()] if new_tag.strip() else []))
+            
+            priority = st.selectbox(
+                "Priority",
+                ["Low", "Medium", "High", "Important"],
+                index=0,
+                key="priority_input"
+            )
+            
+            number = st.number_input(
+                "Number (for grouping)",
+                min_value=0,
+                value=0,
+                step=1,
+                key="number_input"
+            )
+            
+            submitted = st.form_submit_button("💾 Save Link", help="Save the link to your collection")
+            
+            if submitted:
+                logging.debug(f"Form submitted: URL={url}, Title={title}, Description={description}, Tags={tags}, Priority={priority}, Number={number}, Mode={mode}")
+                if not url:
+                    st.error("❌ Please enter a URL")
+                elif not title:
+                    st.error("❌ Please enter a title")
+                else:
+                    new_df = save_link(working_df, url, title, description, tags, priority, number, mode)
+                    if new_df is not None:
+                        if mode in ["admin", "guest"] and excel_file:
+                            folder_id = st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "")
+                            if save_data(new_df, excel_file, folder_id):
+                                st.session_state['df'] = new_df
+                                st.success("✅ Link saved successfully!")
+                                if new_df.iloc[-1]["is_duplicate"]:
+                                    st.warning("⚠️ This URL is a duplicate.")
+                                st.balloons()
+                                time.sleep(0.5)
+                                st.session_state['clear_url'] = True
+                                st.session_state['url_input_counter'] += 1
+                                for key in ['auto_title', 'auto_description', 'suggested_tags', 'metadata_fetched']:
+                                    st.session_state.pop(key, None)
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to save link to Google Drive")
+                        else:
+                            st.session_state['user_df'] = new_df
+                            st.success("✅ Link saved successfully! Download your links as they are temporary.")
+                            if new_df.iloc[-1]["is_duplicate"]:
+                                st.warning("⚠️ This URL is a duplicate.")
+                            st.balloons()
+                            time.sleep(0.5)
+                            st.session_state['clear_url'] = True
+                            st.session_state['url_input_counter'] += 1
+                            for key in ['auto_title', 'auto_description', 'suggested_tags', 'metadata_fetched']:
+                                st.session_state.pop(key, None)
+                            st.rerun()
+                    else:
+                        st.error("❌ Failed to process link")
+
+    with tab2:
+        st.markdown("<h4>Upload Browser Bookmarks</h4>", unsafe_allow_html=True)
+        with st.form(key="upload_bookmarks_form", clear_on_submit=True):
+            uploaded_file = st.file_uploader(
+                "Upload Bookmarks (Excel, CSV, HTML)",
+                type=["xlsx", "csv", "html"],
+                key="bookmark_uploader"
+            )
+            duplicate_action = st.selectbox(
+                "Handle Duplicates",
+                ["Keep Both", "Skip  ["Admin", "Guest", "Public"],
+                index=["Admin", "Guest", "Public"].index(st.session_state["login_mode"]),
+                key="login_mode_radio"
+            )
     
     # Update session state when mode changes
     if mode != st.session_state["login_mode"]:
@@ -226,7 +498,7 @@ def login_form():
 
 def add_link_section(df, excel_file, mode):
     """Section for adding new links or uploading bookmark files"""
-    apply_css()  # Ensure CSS is applied
+    apply_css(is_mobile=st.session_state.get('layout_mode', 'desktop') == 'mobile')
     st.markdown("<h3>🌐 Add New Link or Upload Bookmarks</h3>", unsafe_allow_html=True)
     
     # Initialize user DataFrame for public mode with all required columns
@@ -338,7 +610,7 @@ def add_link_section(df, excel_file, mode):
                 options=all_tags,
                 default=suggested_tags if suggested_tags else [],
                 help="Select existing tags or add new ones below.",
-                key="existing_tags_input"
+                key=f"existing_tags_input_{st.session_state.get('url_input_counter', 0)}"
             )
             
             new_tag = st.text_input(
@@ -463,7 +735,7 @@ def add_link_section(df, excel_file, mode):
 
 def browse_section(df, excel_file, mode):
     """Section to browse, search, and delete links"""
-    apply_css()  # Ensure CSS is applied
+    apply_css(is_mobile=st.session_state.get('layout_mode', 'desktop') == 'mobile')
     st.markdown("<h3>📚 Browse Saved Links</h3>", unsafe_allow_html=True)
     
     if mode == "public":
@@ -570,8 +842,10 @@ def browse_section(df, excel_file, mode):
                     selected_indices = edited_df[edited_df["delete"] == True].index
                     if not selected_indices.empty:
                         selected_link_ids = filtered_df.iloc[selected_indices]["link_id"].tolist()
+                        logging.debug(f"Selected link_ids: {selected_link_ids}")
                         folder_id = st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "") if mode in ["admin", "guest"] else ""
                         updated_df = delete_selected_links(df, selected_link_ids, excel_file, mode, folder_id)
+                        logging.debug(f"Post-deletion DataFrame shape: {updated_df.shape}")
                         if mode == "public":
                             st.session_state["user_df"] = updated_df
                         else:
@@ -594,19 +868,24 @@ def browse_section(df, excel_file, mode):
 def delete_selected_links(df, selected_ids, excel_file, mode, folder_id):
     """Delete selected links from the DataFrame"""
     try:
+        logging.debug(f"Before deletion: DataFrame shape={df.shape}, selected_ids={selected_ids}")
         updated_df = df[~df["link_id"].isin(selected_ids)].reset_index(drop=True)
+        logging.debug(f"After deletion: DataFrame shape={updated_df.shape}")
         if mode in ["admin", "guest"] and excel_file:
             from utils.data_manager import save_data
-            save_data(updated_df, excel_file, folder_id)
+            if not save_data(updated_df, excel_file, folder_id):
+                st.error("❌ Failed to save updated data to Google Drive")
+                logging.error("Failed to save updated data to Google Drive")
+                return df
         return updated_df
     except Exception as e:
-        st.error(f"Error deleting links: {str(e)}")
+        st.error(f"❌ Error deleting links: {str(e)}")
         logging.error(f"Delete links failed: {str(e)}")
         return df
 
 def download_section(df, excel_file, mode):
     """Section to download links as Excel with hyperlinked URLs"""
-    apply_css()  # Ensure CSS is applied
+    apply_css(is_mobile=st.session_state.get('layout_mode', 'desktop') == 'mobile')
     st.markdown("<h3>Export Data</h3>", unsafe_allow_html=True)
     
     if mode == "public":
@@ -652,7 +931,7 @@ def download_section(df, excel_file, mode):
 
 def analytics_section(df):
     """Admin-only analytics tab"""
-    apply_css()  # Ensure CSS is applied
+    apply_css(is_mobile=st.session_state.get('layout_mode', 'desktop') == 'mobile')
     st.markdown("<h3>Analytics</h3>", unsafe_allow_html=True)
     
     if df.empty:
