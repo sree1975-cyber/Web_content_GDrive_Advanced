@@ -121,6 +121,7 @@ def login_form():
         for key in ["admin_password", "guest_username", "guest_password"]:
             if key in st.session_state:
                 del st.session_state[key]
+        logging.debug(f"Login mode changed to: {mode}")
         st.rerun()
     
     # Render appropriate form or button based on mode
@@ -166,7 +167,7 @@ def login_form():
             st.session_state["mode"] = "public"
             st.session_state["username"] = None
             logging.debug("Public login successful")
-            st.success("✅ Continuing as Public User!”)
+            st.success("✅ Continuing as Public User!")
             st.balloons()
             time.sleep(0.5)
             st.rerun()
