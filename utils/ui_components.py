@@ -14,7 +14,7 @@ import uuid
 logging.debug(f"Streamlit version: {st.__version__}")
 
 def apply_css(is_mobile=False):
-    """Apply CSS for consistent color scheme, with mobile/desktop toggle"""
+    """Apply CSS for consistent color scheme, with distinct mobile/desktop layouts"""
     css = """
     <style>
     /* Base styles */
@@ -68,7 +68,26 @@ def apply_css(is_mobile=False):
         0% { opacity: 0; }
         100% { opacity: 1; }
     }
+    /* Toggle icon styling */
+    .layout-toggle {
+        font-size: 1.5rem;
+        cursor: pointer;
+        padding: 0.5rem;
+        border-radius: 50%;
+        transition: background-color 0.3s;
+    }
+    .layout-toggle:hover {
+        background-color: #e0e0e0;
+    }
+    .layout-toggle.active {
+        background-color: #7a97e8;
+        color: white;
+    }
     /* Desktop styles */
+    .app-container {
+        max-width: 90vw;
+        margin: 0 auto;
+    }
     .stForm, .stDataFrame {
         font-size: 16px;
     }
@@ -85,10 +104,15 @@ def apply_css(is_mobile=False):
     .stTextInput, .stMultiSelect, .stSelectbox {
         width: auto;
     }
-    /* Mobile styles */
     """
     if is_mobile:
         css += """
+        /* Mobile styles */
+        .app-container {
+            max-width: 360px;
+            margin: 0 auto;
+            padding: 0 0.5rem;
+        }
         .stForm, .stDataFrame {
             font-size: 14px;
         }
@@ -98,6 +122,7 @@ def apply_css(is_mobile=False):
         }
         .stDataFrame {
             overflow-x: auto;
+            width: 100%;
         }
         .search-container {
             flex-direction: column;
@@ -146,9 +171,27 @@ def display_header(mode):
             time.sleep(2)
             st.rerun()
     with col2:
-        layout_label = "Switch to Mobile View" if st.session_state['layout_mode'] == 'desktop' else "Switch to Desktop View"
-        if st.button(layout_label, help="Toggle between mobile and desktop layouts"):
-            st.session_state['layout_mode'] = 'mobile' if st.session_state['layout_mode'] == 'desktop' else 'desktop'
+        # Icon-based layout toggle
+        current_mode = st.session_state['layout_mode']
+        icon = "📱" if current_mode == 'desktop' else "📺"
+        tooltip = "Switch to Mobile View" if current_mode == 'desktop' else "Switch to Desktop View"
+        st.markdown(f"""
+        <div class="button-tooltip" data-tooltip="{tooltip}">
+            <span class="layout-toggle{' active' if current_mode == ('mobile' if icon == '📱' else 'desktop') else ''}"
+                  onclick="streamlitWrite('toggle_layout', '{ 'mobile' if current_mode == 'desktop' else 'desktop' }')">
+                {icon}
+            </span>
+        </div>
+        <script>
+        function streamlitWrite(key, value) {{
+            const event = new CustomEvent('streamlit:setComponentValue', {{detail: {{key: key, value: value}}}});
+            window.parent.document.dispatchEvent(event);
+        }}
+        </script>
+        """, unsafe_allow_html=True)
+        if st.session_state.get('toggle_layout'):
+            st.session_state['layout_mode'] = st.session_state['toggle_layout']
+            del st.session_state['toggle_layout']
             logging.debug(f"Layout toggled to: {st.session_state['layout_mode']}")
             st.rerun()
 
@@ -580,15 +623,17 @@ def browse_section(df, excel_file, mode):
         display_df = filtered_df[["url", "title", "description", "tags", "priority", "number", "is_duplicate"]].copy()
         display_df["delete"] = False
         
+        # Adjust column widths based on layout mode
+        is_mobile = st.session_state.get('layout_mode', 'desktop') == 'mobile'
         column_config = {
-            "delete": st.column_config.CheckboxColumn("Delete", default=False),
-            "url": st.column_config.LinkColumn("URL", display_text="Visit"),
-            "title": st.column_config.TextColumn("Title"),
-            "description": st.column_config.TextColumn("Description"),
-            "tags": st.column_config.TextColumn("Tags"),
-            "priority": st.column_config.TextColumn("Priority"),
-            "number": st.column_config.NumberColumn("Number"),
-            "is_duplicate": st.column_config.CheckboxColumn("Is Duplicate")
+            "delete": st.column_config.CheckboxColumn("Delete", default=False, width=50),
+            "url": st.column_config.LinkColumn("URL", display_text="Visit", width=100 if is_mobile else 200),
+            "title": st.column_config.TextColumn("Title", width=100 if is_mobile else 200),
+            "description": st.column_config.TextColumn("Description", width=150 if is_mobile else 300),
+            "tags": st.column_config.TextColumn("Tags", width=80 if is_mobile else 150),
+            "priority": st.column_config.TextColumn("Priority", width=60 if is_mobile else 100),
+            "number": st.column_config.NumberColumn("Number", width=50 if is_mobile else 80),
+            "is_duplicate": st.column_config.CheckboxColumn("Is Duplicate", width=80 if is_mobile else 100)
         }
         
         try:
