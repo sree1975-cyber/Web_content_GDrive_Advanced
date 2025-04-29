@@ -10,6 +10,9 @@ from openpyxl.styles import PatternFill, Font, Alignment
 import time
 import uuid
 
+# Log Streamlit version for debugging
+logging.debug(f"Streamlit version: {st.__version__}")
+
 def apply_css():
     """Apply CSS for consistent color scheme across the app"""
     css = """
@@ -116,7 +119,7 @@ def login_form():
     # About Web Content Manager expander with try-catch
     try:
         logging.debug("Attempting to render About Web Content Manager expander")
-        with st.expander("About Web Content Manager", expanded=False, key="about_expander"):
+        with st.expander("About Web Content Manager", expanded=False):
             st.markdown("""
             <div style="padding: 1rem;">
                 <h3>Your Personal Web Library</h3>
