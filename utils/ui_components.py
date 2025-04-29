@@ -423,7 +423,37 @@ def add_link_section(df, excel_file, mode):
                 key="duplicate_action"
             )
             
-            submitted = st.form_submit_button("Import Bookclap for {url_temp}: {str(e)}")
+            submitted = st.form_submit_button("Import Bookmarks", help="Import bookmarks from file")
+            
+            if submitted:
+                if uploaded_file:
+                    try:
+                        progress_bar = st.progress(0)
+                        new_df = process_bookmark_file(working_df, uploaded_file, mode, duplicate_action, progress_bar)
+                        if mode in ["admin", "guest"] and excel_file:
+                            folder_id = st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "")
+                            if save_data(new_df, excel_file, folder_id):
+                                st.session_state['df'] = new_df
+                                st.success(f"✅ Bookmarks imported! {len(new_df) - len(working_df)} new links added.")
+                                if new_df["is_duplicate"].any():
+                                    st.warning("⚠️ Some URLs are duplicates.")
+                                st.balloons()
+                                time.sleep(0.5)
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to save bookmarks to Google Drive")
+                        else:
+                            st.session_state['user_df'] = new_df
+                            st.success(f"✅ Bookmarks imported! {len(new_df) - len(working_df)} new links added.")
+                            if new_df["is_duplicate"].any():
+                                st.warning("⚠️ Some URLs are duplicates.")
+                            st.balloons()
+                            time.sleep(0.5)
+                            st.rerun()
+                        return new_df
+                    except Exception as e:
+                        st.error(f"❌ Failed to process bookmark file: {str(e)}")
+                        logging.error(f"Bookmark upload failed: {str(e)}")
                     finally:
                         progress_bar.empty()
                 else:
@@ -581,14 +611,6 @@ def download_section(df, excel_file, mode):
     
     if mode == "public":
         df_to_export = st.session_state.get("user_df", pd.DataFrame())
-        # Display warning for Public users
-        st.markdown("""
-        <div class="public-warning">
-            <h4>📢 Save Your Links!</h4>
-            <p>As a Public user, your links are temporary and will be lost when you close the app. Download them as an Excel file now to keep your collection safe! 🚀</p>
-        </div>
-        """, unsafe_allow_html=True)
-        logging.debug("Displayed public user warning for data export")
     else:
         df_to_export = df
     
