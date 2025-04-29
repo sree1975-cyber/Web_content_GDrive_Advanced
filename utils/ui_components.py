@@ -398,7 +398,7 @@ def add_link_section(df, excel_file, mode):
 def browse_section(df, excel_file, mode):
     """Section to browse, search, and delete links"""
     apply_css()  # Ensure CSS is applied
-    st.markdown("<h3>### 📚 Browse Saved Links</h3>", unsafe_allow_html=True)
+    st.markdown("<h3>📚 Browse Saved Links</h3>", unsafe_allow_html=True)
     
     if mode == "public":
         df = st.session_state.get("user_df", pd.DataFrame(columns=[
