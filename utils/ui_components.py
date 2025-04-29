@@ -68,20 +68,15 @@ def apply_css(is_mobile=False):
         0% { opacity: 0; }
         100% { opacity: 1; }
     }
-    /* Toggle icon styling */
-    .layout-toggle {
-        font-size: 1.5rem;
-        cursor: pointer;
+    /* Toggle button styling */
+    .stButton > button {
         padding: 0.5rem;
+        font-size: 1.5rem;
         border-radius: 50%;
         transition: background-color 0.3s;
     }
-    .layout-toggle:hover {
+    .stButton > button:hover {
         background-color: #e0e0e0;
-    }
-    .layout-toggle.active {
-        background-color: #7a97e8;
-        color: white;
     }
     /* Desktop styles */
     .app-container {
@@ -171,29 +166,16 @@ def display_header(mode):
             time.sleep(2)
             st.rerun()
     with col2:
-        # Icon-based layout toggle
+        # Icon-based layout toggle using st.button
         current_mode = st.session_state['layout_mode']
         icon = "📱" if current_mode == 'desktop' else "📺"
         tooltip = "Switch to Mobile View" if current_mode == 'desktop' else "Switch to Desktop View"
-        st.markdown(f"""
-        <div class="button-tooltip" data-tooltip="{tooltip}">
-            <span class="layout-toggle{' active' if current_mode == ('mobile' if icon == '📱' else 'desktop') else ''}"
-                  onclick="streamlitWrite('toggle_layout', '{ 'mobile' if current_mode == 'desktop' else 'desktop' }')">
-                {icon}
-            </span>
-        </div>
-        <script>
-        function streamlitWrite(key, value) {{
-            const event = new CustomEvent('streamlit:setComponentValue', {{detail: {{key: key, value: value}}}});
-            window.parent.document.dispatchEvent(event);
-        }}
-        </script>
-        """, unsafe_allow_html=True)
-        if st.session_state.get('toggle_layout'):
-            st.session_state['layout_mode'] = st.session_state['toggle_layout']
-            del st.session_state['toggle_layout']
+        if st.button(icon, help=tooltip, key="layout_toggle"):
+            st.session_state['layout_mode'] = 'mobile' if current_mode == 'desktop' else 'desktop'
             logging.debug(f"Layout toggled to: {st.session_state['layout_mode']}")
             st.rerun()
+        # Debug output for layout mode
+        st.write(f"Debug: Current layout mode={st.session_state['layout_mode']}")
 
 def login_form():
     """Display login form for Admin, Guest, or Public access"""
