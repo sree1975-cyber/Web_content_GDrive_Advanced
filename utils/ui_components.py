@@ -203,7 +203,7 @@ def login_form():
                     <li>📥 <strong>Export capability</strong> - Download your collection in Excel or CSV format</li>
                     <li>💾 <strong>Persistent storage</strong> - Your data is saved automatically and persists between sessions</li>
                 </ul>
-                <p>For detailed instructions, see the <a href="https://github.com/Web_content_GDrive_Advanced/web_content_gdrive_advanced/blob/main/USER_GUIDE.md" target="_blank">User Guide</a>.</p>
+                <p>For detailed instructions, see the <a href="https://github.com/sree1975-cyber/Web_content_GDrive_Advanced/blob/main/USER_GUIDE.md" target="_blank">User Guide</a>.</p>
             </div>
             """, unsafe_allow_html=True)
         logging.debug("Expander rendered successfully")
