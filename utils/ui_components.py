@@ -10,9 +10,6 @@ from openpyxl.styles import PatternFill, Font, Alignment
 import time
 import uuid
 
-# Log Streamlit version for debugging
-logging.debug(f"Streamlit version: {st.__version__}")
-
 def apply_css():
     """Apply CSS for consistent color scheme across the app"""
     css = """
@@ -116,29 +113,23 @@ def login_form():
     </div>
     """, unsafe_allow_html=True)
     
-    # About Web Content Manager expander with try-catch
-    try:
-        logging.debug("Attempting to render About Web Content Manager expander")
-        with st.expander("ℹ️ About Web Content Manager", expanded=False):
-            st.markdown("""
-            <div style="padding: 1rem;">
-                <h3>Your Personal Web Library</h3>
-                <p>Web Content Manager helps you save and organize web links with:</p>
-                <ul>
-                    <li>📌 One-click saving of important web resources</li>
-                    <li>🏷️ <strong>Smart tagging</strong> - Automatically suggests tags from page metadata</li>
-                    <li>🔍 <strong>Powerful search</strong> - Full-text search across all fields with tag filtering</li>
-                    <li>🗑️ <strong>Delete functionality</strong> - Remove unwanted links</li>
-                    <li>📊 <strong>Data Table View</strong> - See all links in a sortable, filterable table</li>
-                    <li>📥 <strong>Export capability</strong> - Download your collection in Excel or CSV format</li>
-                    <li>💾 <strong>Persistent storage</strong> - Your data is saved automatically and persists between sessions</li>
-                </ul>
-            </div>
-            """, unsafe_allow_html=True)
-        logging.debug("Expander rendered successfully")
-    except Exception as e:
-        st.error("❌ Failed to render About expander. Please try again or contact support.")
-        logging.error(f"Expander failed: {str(e)}")
+    # About Web Content Manager expander
+    with st.expander("ℹ️ About Web Content Manager", expanded=False, key="about_expander"):
+        st.markdown("""
+        <div style="padding: 1rem;">
+            <h3>Your Personal Web Library</h3>
+            <p>Web Content Manager helps you save and organize web links with:</p>
+            <ul>
+                <li>📌 One-click saving of important web resources</li>
+                <li>🏷️ <strong>Smart tagging</strong> - Automatically suggests tags from page metadata</li>
+                <li>🔍 <strong>Powerful search</strong> - Full-text search across all fields with tag filtering</li>
+                <li>🗑️ <strong>Delete functionality</strong> - Remove unwanted links</li>
+                <li>📊 <strong>Data Table View</strong> - See all links in a sortable, filterable table</li>
+                <li>📥 <strong>Export capability</strong> - Download your collection in Excel or CSV format</li>
+                <li>💾 <strong>Persistent storage</strong> - Your data is saved automatically and persists between sessions</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
     
     # Initialize login mode in session state
     if "login_mode" not in st.session_state:
@@ -491,7 +482,7 @@ def browse_section(df, excel_file, mode):
             filtered_df["title"].str.contains(search_query, case=False, na=False) |
             filtered_df["description"].str.contains(search_query, case=False, na=False) |
             filtered_df["url"].str.contains(search_query, case=False, na=False) |
-            filtered_df["tags"].str.contains(search_query, case=False, na=False)
+            filtered_df["tags"].str.contains(search_query,(keyword or tags case=False, na=False)
         ]
     if tag_filter:
         filtered_df = filtered_df[filtered_df["tags"].str.contains('|'.join(tag_filter), case=False, na=False)]
@@ -528,17 +519,14 @@ def browse_section(df, excel_file, mode):
                 use_container_width=True,
                 disabled=["url", "title", "description", "tags", "priority", "number", "is_duplicate"]
             )
-            logging.debug(f"Data editor rendered, delete column exists: {'delete' in edited_df.columns}")
         except Exception as e:
             st.error(f"❌ Failed to display data table: {str(e)}")
             logging.error(f"Data editor failed: {str(e)}")
             return
         
-        # Show delete button only if at least one checkbox is checked
-        if "delete" in edited_df.columns and edited_df["delete"].any():
-            logging.debug(f"Delete button visible: {edited_df['delete'].sum()} rows selected")
-            if st.button("🗑️ Delete Selected Links", help="Delete selected links"):
-                try:
+        if st.button("🗑️ Delete Selected Links", help="Delete selected links"):
+            try:
+                if "delete" in edited_df.columns:
                     selected_indices = edited_df[edited_df["delete"] == True].index
                     if not selected_indices.empty:
                         selected_link_ids = filtered_df.iloc[selected_indices]["link_id"].tolist()
@@ -554,11 +542,11 @@ def browse_section(df, excel_file, mode):
                         st.rerun()
                     else:
                         st.error("❌ Please select at least one link to delete.")
-                except Exception as e:
-                    st.error(f"❌ Failed to delete links: {str(e)}")
-                    logging.error(f"Delete links failed: {str(e)}")
-        else:
-            logging.debug("Delete button hidden: no rows selected for deletion")
+                else:
+                    st.error("❌ Deletion column not found.")
+            except Exception as e:
+                st.error(f"❌ Failed to delete links: {str(e)}")
+                logging.error(f"Delete links failed: {str(e)}")
     
     if filtered_df.empty:
         st.info("No links match the search criteria.")
