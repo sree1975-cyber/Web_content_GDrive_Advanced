@@ -175,7 +175,7 @@ def display_header(mode):
             logging.debug(f"Layout toggled to: {st.session_state['layout_mode']}")
             st.rerun()
         # Debug output for layout mode
-        st.write(f"Debug: Current layout mode={st.session_state['layout_mode']}")
+       # st.write(f"Debug: Current layout mode={st.session_state['layout_mode']}")
 
 def login_form():
     """Display login form for Admin, Guest, or Public access"""
