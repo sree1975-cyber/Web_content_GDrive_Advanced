@@ -54,20 +54,6 @@ def apply_css():
         gap: 1rem;
         margin-bottom: 1rem;
     }
-    /* Public warning box */
-    .public-warning {
-        background-color: #FFF3CD;
-        border: 2px solid #FFC107;
-        border-radius: 8px;
-        padding: 1rem;
-        margin-bottom: 1rem;
-        text-align: center;
-        animation: fadeIn 1s ease-in;
-    }
-    @keyframes fadeIn {
-        0% { opacity: 0; }
-        100% { opacity: 1; }
-    }
     /* Responsive design */
     @media (max-width: 768px) {
         .stForm, .stDataFrame {
@@ -277,24 +263,16 @@ def add_link_section(df, excel_file, mode):
         is_url_valid = url_temp.startswith(("http://", "https://")) if url_temp else False
         
         if st.button("Fetch Metadata", disabled=not is_url_valid, key="fetch_metadata"):
-            with st.spinner("Fetching metadata..."):
-                try:
-                    metadata = fetch_metadata(url_temp)
-                    st.session_state['auto_title'] = metadata.get("title", "")
-                    st.session_state['auto_description'] = metadata.get("description", "")
-                    st.session_state['suggested_tags'] = metadata.get("tags", [])
-                    logging.debug(f"Fetched metadata for {url_temp}: title={st.session_state['auto_title']}, description={st.session_state['auto_description']}, tags={st.session_state['suggested_tags']}")
-                    st.session_state['clear_url'] = False
-                    st.session_state['metadata_fetched'] = True  # Flag to trigger rerun
-                    st.info("✅ Metadata fetched! Fields updated.")
-                    if not st.session_state['suggested_tags']:
-                        st.warning("⚠️ No tags found in page metadata. Please select existing tags or add new ones.")
-                except Exception as e:
-                    st.error(f"❌ Failed to fetch metadata: {str(e)}")
-                    logging.error(f"Metadata fetch failed for {url_temp}: {str(e)}")
-                    st.session_state['suggested_tags'] = []
-                    st.session_state['metadata_fetched'] = True
-                st.rerun()  # Force rerun to update multiselect
+            with st.spinner("Fetching..."):
+                metadata = fetch_metadata(url_temp)
+                st.session_state['auto_title'] = metadata.get("title", "")
+                st.session_state['auto_description'] = metadata.get("description", "")
+                st.session_state['suggested_tags'] = metadata.get("tags", [])
+                logging.debug(f"Fetched metadata for {url_temp}: title={st.session_state['auto_title']}, tags={st.session_state['suggested_tags']}")
+                st.session_state['clear_url'] = False
+                st.info("✅ Metadata fetched! Fields updated.")
+                if not st.session_state['suggested_tags']:
+                    st.warning("⚠️ No tags found in page metadata. Please add tags manually.")
 
         # Form for saving link
         with st.form("single_url_form", clear_on_submit=True):
@@ -326,17 +304,14 @@ def add_link_section(df, excel_file, mode):
                 all_tags = sorted({str(tag).strip() for tags in working_df['tags']
                                  for tag in (tags.split(',') if isinstance(tags, str) else [str(tags)])
                                  if str(tag).strip()})
-            default_tags = ['News', 'Shopping', 'Research', 'Entertainment', 'Cloud', 'Education', 'Other']
-            suggested_tags = st.session_state.get('suggested_tags', [])
-            all_tags = sorted(list(set(all_tags + default_tags + [str(tag).strip() for tag in suggested_tags if str(tag).strip()])))
-            
-            # Log tags for debugging
-            logging.debug(f"Rendering multiselect: suggested_tags={suggested_tags}, all_tags={all_tags}")
+            suggested_tags = st.session_state.get('suggested_tags', []) + \
+                           ['News', 'Shopping', 'Research', 'Entertainment', 'Cloud', 'Education', 'Other']
+            all_tags = sorted(list(set(all_tags + [str(tag).strip() for tag in suggested_tags if str(tag).strip()])))
             
             selected_tags = st.multiselect(
                 "Tags",
                 options=all_tags,
-                default=suggested_tags if suggested_tags else [],
+                default=st.session_state.get('suggested_tags', []),
                 help="Select existing tags or add new ones below.",
                 key="existing_tags_input"
             )
@@ -388,7 +363,7 @@ def add_link_section(df, excel_file, mode):
                                 time.sleep(0.5)
                                 st.session_state['clear_url'] = True
                                 st.session_state['url_input_counter'] += 1
-                                for key in ['auto_title', 'auto_description', 'suggested_tags', 'metadata_fetched']:
+                                for key in ['auto_title', 'auto_description', 'suggested_tags']:
                                     st.session_state.pop(key, None)
                                 st.rerun()
                             else:
@@ -402,7 +377,7 @@ def add_link_section(df, excel_file, mode):
                             time.sleep(0.5)
                             st.session_state['clear_url'] = True
                             st.session_state['url_input_counter'] += 1
-                            for key in ['auto_title', 'auto_description', 'suggested_tags', 'metadata_fetched']:
+                            for key in ['auto_title', 'auto_description', 'suggested_tags']:
                                 st.session_state.pop(key, None)
                             st.rerun()
                     else:
