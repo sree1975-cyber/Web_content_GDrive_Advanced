@@ -113,23 +113,29 @@ def login_form():
     </div>
     """, unsafe_allow_html=True)
     
-    # About Web Content Manager expander
-    with st.expander("ℹ️ About Web Content Manager", expanded=False, key="about_expander"):
-        st.markdown("""
-        <div style="padding: 1rem;">
-            <h3>Your Personal Web Library</h3>
-            <p>Web Content Manager helps you save and organize web links with:</p>
-            <ul>
-                <li>📌 One-click saving of important web resources</li>
-                <li>🏷️ <strong>Smart tagging</strong> - Automatically suggests tags from page metadata</li>
-                <li>🔍 <strong>Powerful search</strong> - Full-text search across all fields with tag filtering</li>
-                <li>🗑️ <strong>Delete functionality</strong> - Remove unwanted links</li>
-                <li>📊 <strong>Data Table View</strong> - See all links in a sortable, filterable table</li>
-                <li>📥 <strong>Export capability</strong> - Download your collection in Excel or CSV format</li>
-                <li>💾 <strong>Persistent storage</strong> - Your data is saved automatically and persists between sessions</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
+    # About Web Content Manager expander with try-catch
+    try:
+        logging.debug("Attempting to render About Web Content Manager expander")
+        with st.expander("About Web Content Manager", expanded=False, key="about_expander"):
+            st.markdown("""
+            <div style="padding: 1rem;">
+                <h3>Your Personal Web Library</h3>
+                <p>Web Content Manager helps you save and organize web links with:</p>
+                <ul>
+                    <li>📌 One-click saving of important web resources</li>
+                    <li>🏷️ <strong>Smart tagging</strong> - Automatically suggests tags from page metadata</li>
+                    <li>🔍 <strong>Powerful search</strong> - Full-text search across all fields with tag filtering</li>
+                    <li>🗑️ <strong>Delete functionality</strong> - Remove unwanted links</li>
+                    <li>📊 <strong>Data Table View</strong> - See all links in a sortable, filterable table</li>
+                    <li>📥 <strong>Export capability</strong> - Download your collection in Excel or CSV format</li>
+                    <li>💾 <strong>Persistent storage</strong> - Your data is saved automatically and persists between sessions</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
+        logging.debug("Expander rendered successfully")
+    except Exception as e:
+        st.error("❌ Failed to render About expander. Please try again or contact support.")
+        logging.error(f"Expander failed: {str(e)}")
     
     # Initialize login mode in session state
     if "login_mode" not in st.session_state:
