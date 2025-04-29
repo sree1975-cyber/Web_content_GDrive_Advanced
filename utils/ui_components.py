@@ -427,7 +427,7 @@ def add_link_section(df, excel_file, mode):
 def browse_section(df, excel_file, mode):
     """Section to browse, search, and delete links"""
     apply_css()  # Ensure CSS is applied
-    st.markdown("<h3>📚 Browse Saved Links</h3>", unsafe_allow_html=True)
+    st   st.markdown("<h3>📚 Browse Saved Links</h3>", unsafe_allow_html=True)
     
     if mode == "public":
         df = st.session_state.get("user_df", pd.DataFrame(columns=[
@@ -482,7 +482,7 @@ def browse_section(df, excel_file, mode):
             filtered_df["title"].str.contains(search_query, case=False, na=False) |
             filtered_df["description"].str.contains(search_query, case=False, na=False) |
             filtered_df["url"].str.contains(search_query, case=False, na=False) |
-            filtered_df["tags"].str.contains(search_query,(keyword or tags case=False, na=False)
+            filtered_df["tags"].str.contains(search_query, case=False, na=False)
         ]
     if tag_filter:
         filtered_df = filtered_df[filtered_df["tags"].str.contains('|'.join(tag_filter), case=False, na=False)]
@@ -519,14 +519,17 @@ def browse_section(df, excel_file, mode):
                 use_container_width=True,
                 disabled=["url", "title", "description", "tags", "priority", "number", "is_duplicate"]
             )
+            logging.debug(f"Data editor rendered, delete column exists: {'delete' in edited_df.columns}")
         except Exception as e:
             st.error(f"❌ Failed to display data table: {str(e)}")
             logging.error(f"Data editor failed: {str(e)}")
             return
         
-        if st.button("🗑️ Delete Selected Links", help="Delete selected links"):
-            try:
-                if "delete" in edited_df.columns:
+        # Show delete button only if at least one checkbox is checked
+        if "delete" in edited_df.columns and edited_df["delete"].any():
+            logging.debug(f"Delete button visible: {edited_df['delete'].sum()} rows selected")
+            if st.button("🗑️ Delete Selected Links", help="Delete selected links"):
+                try:
                     selected_indices = edited_df[edited_df["delete"] == True].index
                     if not selected_indices.empty:
                         selected_link_ids = filtered_df.iloc[selected_indices]["link_id"].tolist()
@@ -542,11 +545,11 @@ def browse_section(df, excel_file, mode):
                         st.rerun()
                     else:
                         st.error("❌ Please select at least one link to delete.")
-                else:
-                    st.error("❌ Deletion column not found.")
-            except Exception as e:
-                st.error(f"❌ Failed to delete links: {str(e)}")
-                logging.error(f"Delete links failed: {str(e)}")
+                except Exception as e:
+                    st.error(f"❌ Failed to delete links: {str(e)}")
+                    logging.error(f"Delete links failed: {str(e)}")
+        else:
+            logging.debug("Delete button hidden: no rows selected for deletion")
     
     if filtered_df.empty:
         st.info("No links match the search criteria.")
