@@ -175,7 +175,7 @@ def display_header(mode):
             logging.debug(f"Layout toggled to: {st.session_state['layout_mode']}")
             st.rerun()
         # Debug output for layout mode
-       # st.write(f"Debug: Current layout mode={st.session_state['layout_mode']}")
+        # st.write(f"Debug: Current layout mode={st.session_state['layout_mode']}")
 
 def login_form():
     """Display login form for Admin, Guest, or Public access"""
@@ -203,7 +203,7 @@ def login_form():
                     <li>📥 <strong>Export capability</strong> - Download your collection in Excel or CSV format</li>
                     <li>💾 <strong>Persistent storage</strong> - Your data is saved automatically and persists between sessions</li>
                 </ul>
-                <p>For detailed instructions, see the <a href="https://github.com/sree1975-cyber/Web_content_GDrive_Advanced/blob/main/USER_GUIDE.md" target="_blank">User Guide</a>.</p>
+                <p>Access the User Guide in the <strong>Help</strong> tab after logging in.</p>
             </div>
             """, unsafe_allow_html=True)
         logging.debug("Expander rendered successfully")
@@ -469,7 +469,7 @@ def add_link_section(df, excel_file, mode):
                             st.session_state['clear_url'] = True
                             st.session_state['url_input_counter'] += 1
                             for key in ['auto_title', 'auto_description', 'suggested_tags', 'metadata_fetched']:
-                                    st.session_state.pop(key, None)
+                                st.session_state.pop(key, None)
                             st.rerun()
                     else:
                         st.error("❌ Failed to process link")
