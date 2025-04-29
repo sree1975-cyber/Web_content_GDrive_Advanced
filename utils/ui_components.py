@@ -70,7 +70,7 @@ def apply_css():
     """
     st.markdown(css, unsafe_allow_html=True)
 
- with st.expander("ℹ️ About Web Content Manager", expanded=False):
+    with st.expander("ℹ️ About Web Content Manager", expanded=False):
         st.markdown("""
         <div style="padding: 1rem;">
             <h3>Your Personal Web Library</h3>
