@@ -54,6 +54,20 @@ def apply_css():
         gap: 1rem;
         margin-bottom: 1rem;
     }
+    /* Public warning box */
+    .public-warning {
+        background-color: #FFF3CD;
+        border: 2px solid #FFC107;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        text-align: center;
+        animation: fadeIn 1s ease-in;
+    }
+    @keyframes fadeIn {
+        0% { opacity: 0; }
+        100% { opacity: 1; }
+    }
     /* Responsive design */
     @media (max-width: 768px) {
         .stForm, .stDataFrame {
@@ -263,16 +277,24 @@ def add_link_section(df, excel_file, mode):
         is_url_valid = url_temp.startswith(("http://", "https://")) if url_temp else False
         
         if st.button("Fetch Metadata", disabled=not is_url_valid, key="fetch_metadata"):
-            with st.spinner("Fetching..."):
-                metadata = fetch_metadata(url_temp)
-                st.session_state['auto_title'] = metadata.get("title", "")
-                st.session_state['auto_description'] = metadata.get("description", "")
-                st.session_state['suggested_tags'] = metadata.get("tags", [])
-                logging.debug(f"Fetched metadata for {url_temp}: title={st.session_state['auto_title']}, tags={st.session_state['suggested_tags']}")
-                st.session_state['clear_url'] = False
-                st.info("✅ Metadata fetched! Fields updated.")
-                if not st.session_state['suggested_tags']:
-                    st.warning("⚠️ No tags found in page metadata. Please add tags manually.")
+            with st.spinner("Fetching metadata..."):
+                try:
+                    metadata = fetch_metadata(url_temp)
+                    st.session_state['auto_title'] = metadata.get("title", "")
+                    st.session_state['auto_description'] = metadata.get("description", "")
+                    st.session_state['suggested_tags'] = metadata.get("tags", [])
+                    logging.debug(f"Fetched metadata for {url_temp}: title={st.session_state['auto_title']}, description={st.session_state['auto_description']}, tags={st.session_state['suggested_tags']}")
+                    st.session_state['clear_url'] = False
+                    st.session_state['metadata_fetched'] = True  # Flag to trigger rerun
+                    st.info("✅ Metadata fetched! Fields updated.")
+                    if not st.session_state['suggested_tags']:
+                        st.warning("⚠️ No tags found in page metadata. Please select existing tags or add new ones.")
+                except Exception as e:
+                    st.error(f"❌ Failed to fetch metadata: {str(e)}")
+                    logging.error(f"Metadata fetch failed for {url_temp}: {str(e)}")
+                    st.session_state['suggested_tags'] = []
+                    st.session_state['metadata_fetched'] = True
+                st.rerun()  # Force rerun to update multiselect
 
         # Form for saving link
         with st.form("single_url_form", clear_on_submit=True):
@@ -304,14 +326,17 @@ def add_link_section(df, excel_file, mode):
                 all_tags = sorted({str(tag).strip() for tags in working_df['tags']
                                  for tag in (tags.split(',') if isinstance(tags, str) else [str(tags)])
                                  if str(tag).strip()})
-            suggested_tags = st.session_state.get('suggested_tags', []) + \
-                           ['News', 'Shopping', 'Research', 'Entertainment', 'Cloud', 'Education', 'Other']
-            all_tags = sorted(list(set(all_tags + [str(tag).strip() for tag in suggested_tags if str(tag).strip()])))
+            default_tags = ['News', 'Shopping', 'Research', 'Entertainment', 'Cloud', 'Education', 'Other']
+            suggested_tags = st.session_state.get('suggested_tags', [])
+            all_tags = sorted(list(set(all_tags + default_tags + [str(tag).strip() for tag in suggested_tags if str(tag).strip()])))
+            
+            # Log tags for debugging
+            logging.debug(f"Rendering multiselect: suggested_tags={suggested_tags}, all_tags={all_tags}")
             
             selected_tags = st.multiselect(
                 "Tags",
                 options=all_tags,
-                default=st.session_state.get('suggested_tags', []),
+                default=suggested_tags if suggested_tags else [],
                 help="Select existing tags or add new ones below.",
                 key="existing_tags_input"
             )
@@ -363,7 +388,7 @@ def add_link_section(df, excel_file, mode):
                                 time.sleep(0.5)
                                 st.session_state['clear_url'] = True
                                 st.session_state['url_input_counter'] += 1
-                                for key in ['auto_title', 'auto_description', 'suggested_tags']:
+                                for key in ['auto_title', 'auto_description', 'suggested_tags', 'metadata_fetched']:
                                     st.session_state.pop(key, None)
                                 st.rerun()
                             else:
@@ -377,7 +402,7 @@ def add_link_section(df, excel_file, mode):
                             time.sleep(0.5)
                             st.session_state['clear_url'] = True
                             st.session_state['url_input_counter'] += 1
-                            for key in ['auto_title', 'auto_description', 'suggested_tags']:
+                            for key in ['auto_title', 'auto_description', 'suggested_tags', 'metadata_fetched']:
                                 st.session_state.pop(key, None)
                             st.rerun()
                     else:
@@ -398,37 +423,7 @@ def add_link_section(df, excel_file, mode):
                 key="duplicate_action"
             )
             
-            submitted = st.form_submit_button("Import Bookmarks", help="Import bookmarks from file")
-            
-            if submitted:
-                if uploaded_file:
-                    try:
-                        progress_bar = st.progress(0)
-                        new_df = process_bookmark_file(working_df, uploaded_file, mode, duplicate_action, progress_bar)
-                        if mode in ["admin", "guest"] and excel_file:
-                            folder_id = st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "")
-                            if save_data(new_df, excel_file, folder_id):
-                                st.session_state['df'] = new_df
-                                st.success(f"✅ Bookmarks imported! {len(new_df) - len(working_df)} new links added.")
-                                if new_df["is_duplicate"].any():
-                                    st.warning("⚠️ Some URLs are duplicates.")
-                                st.balloons()
-                                time.sleep(0.5)
-                                st.rerun()
-                            else:
-                                st.error("❌ Failed to save bookmarks to Google Drive")
-                        else:
-                            st.session_state['user_df'] = new_df
-                            st.success(f"✅ Bookmarks imported! {len(new_df) - len(working_df)} new links added.")
-                            if new_df["is_duplicate"].any():
-                                st.warning("⚠️ Some URLs are duplicates.")
-                            st.balloons()
-                            time.sleep(0.5)
-                            st.rerun()
-                        return new_df
-                    except Exception as e:
-                        st.error(f"❌ Failed to process bookmark file: {str(e)}")
-                        logging.error(f"Bookmark upload failed: {str(e)}")
+            submitted = st.form_submit_button("Import Bookclap for {url_temp}: {str(e)}")
                     finally:
                         progress_bar.empty()
                 else:
@@ -586,6 +581,14 @@ def download_section(df, excel_file, mode):
     
     if mode == "public":
         df_to_export = st.session_state.get("user_df", pd.DataFrame())
+        # Display warning for Public users
+        st.markdown("""
+        <div class="public-warning">
+            <h4>📢 Save Your Links!</h4>
+            <p>As a Public user, your links are temporary and will be lost when you close the app. Download them as an Excel file now to keep your collection safe! 🚀</p>
+        </div>
+        """, unsafe_allow_html=True)
+        logging.debug("Displayed public user warning for data export")
     else:
         df_to_export = df
     
