@@ -119,7 +119,7 @@ def login_form():
     # About Web Content Manager expander with try-catch
     try:
         logging.debug("Attempting to render About Web Content Manager expander")
-        with st.expander("ℹ️ About Web Content Manager", expanded=False):
+        with st.expander("About Web Content Manager", expanded=False):
             st.markdown("""
             <div style="padding: 1rem;">
                 <h3>Your Personal Web Library</h3>
@@ -268,9 +268,12 @@ def add_link_section(df, excel_file, mode):
                 st.session_state['auto_title'] = metadata.get("title", "")
                 st.session_state['auto_description'] = metadata.get("description", "")
                 st.session_state['suggested_tags'] = metadata.get("tags", [])
+                logging.debug(f"Fetched metadata for {url_temp}: title={st.session_state['auto_title']}, tags={st.session_state['suggested_tags']}")
                 st.session_state['clear_url'] = False
                 st.info("✅ Metadata fetched! Fields updated.")
-        
+                if not st.session_state['suggested_tags']:
+                    st.warning("⚠️ No tags found in page metadata. Please add tags manually.")
+
         # Form for saving link
         with st.form("single_url_form", clear_on_submit=True):
             url = st.text_input(
@@ -308,7 +311,7 @@ def add_link_section(df, excel_file, mode):
             selected_tags = st.multiselect(
                 "Tags",
                 options=all_tags,
-                default=[],
+                default=st.session_state.get('suggested_tags', []),
                 help="Select existing tags or add new ones below.",
                 key="existing_tags_input"
             )
