@@ -469,7 +469,7 @@ def add_link_section(df, excel_file, mode):
                             st.session_state['clear_url'] = True
                             st.session_state['url_input_counter'] += 1
                             for key in ['auto_title', 'auto_description', 'suggested_tags', 'metadata_fetched']:
-                                st.session_state.pop(key, None)
+                                    st.session_state.pop(key, None)
                             st.rerun()
                     else:
                         st.error("❌ Failed to process link")
@@ -643,4 +643,100 @@ def browse_section(df, excel_file, mode):
                 st.write("No rows selected")
         
         # Show delete button only if at least one checkbox is checked
-        if "delete" in edited_df.columns and edited_df["delete"]. Potem.
+        if "delete" in edited_df.columns and edited_df["delete"].any():
+            logging.debug(f"Delete button visible: {edited_df['delete'].sum()} rows selected")
+            if st.button("🗑️ Delete Selected Links", help="Delete selected links"):
+                try:
+                    selected_indices = edited_df[edited_df["delete"] == True].index
+                    if not selected_indices.empty:
+                        selected_link_ids = filtered_df.iloc[selected_indices]["link_id"].tolist()
+                        logging.debug(f"Selected link_ids: {selected_link_ids}")
+                        folder_id = st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "") if mode in ["admin", "guest"] else ""
+                        updated_df = delete_selected_links(df, selected_link_ids, excel_file, mode, folder_id)
+                        logging.debug(f"Post-deletion DataFrame shape: {updated_df.shape}")
+                        if mode == "public":
+                            st.session_state["user_df"] = updated_df
+                        else:
+                            st.session_state["df"] = updated_df
+                        st.success("✅ Selected links deleted successfully!")
+                        st.snow()
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        st.error("❌ Please select at least one link to delete.")
+                except Exception as e:
+                    st.error(f"❌ Failed to delete links: {str(e)}")
+                    logging.error(f"Delete links failed: {str(e)}")
+        else:
+            logging.debug("Delete button hidden: no rows selected for deletion")
+    
+    if filtered_df.empty:
+        st.info("No links match the search criteria.")
+
+def download_section(df, excel_file, mode):
+    """Section to download links as Excel with hyperlinked URLs"""
+    apply_css(is_mobile=st.session_state.get('layout_mode', 'desktop') == 'mobile')
+    st.markdown("<h3>Export Data</h3>", unsafe_allow_html=True)
+    
+    if mode == "public":
+        df_to_export = st.session_state.get("user_df", pd.DataFrame())
+    else:
+        df_to_export = df
+    
+    if not df_to_export.empty:
+        output = pd.DataFrame()
+        output["sequence_number"] = range(1, len(df_to_export) + 1)
+        output["link_id"] = df_to_export["link_id"]
+        output["url"] = df_to_export["url"]
+        output["title"] = df_to_export["title"]
+        output["description"] = df_to_export["description"]
+        output["tags"] = df_to_export["tags"]
+        output["priority"] = df_to_export["priority"]
+        output["number"] = df_to_export["number"]
+        output["created_at"] = df_to_export["created_at"]
+        output["updated_at"] = df_to_export["updated_at"]
+        output["is_duplicate"] = df_to_export["is_duplicate"]
+        
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            output.to_excel(writer, index=False, sheet_name="Links")
+            workbook = writer.book
+            worksheet = writer.sheets["Links"]
+            
+            for idx, url in enumerate(output["url"], start=2):
+                worksheet[f"C{idx}"].hyperlink = url
+                worksheet[f"C{idx}"].style = "Hyperlink"
+            
+        buffer.seek(0)
+        
+        st.download_button(
+            label="Download Links as Excel",
+            data=buffer.getvalue(),
+            file_name="links.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            help="Download links as an Excel file with clickable URLs"
+        )
+    else:
+        st.info("No links available to export.")
+
+def analytics_section(df):
+    """Admin-only analytics tab"""
+    apply_css(is_mobile=st.session_state.get('layout_mode', 'desktop') == 'mobile')
+    st.markdown("<h3>Analytics</h3>", unsafe_allow_html=True)
+    
+    if df.empty:
+        st.info("No data available for analytics.")
+        return
+    
+    st.markdown("### Most Frequent URLs")
+    url_counts = df["url"].value_counts().head(5)
+    st.bar_chart(url_counts)
+    
+    st.markdown("### Most Common Tags")
+    tag_counts = df["tags"].str.split(',', expand=True).stack().value_counts()
+    st.bar_chart(tag_counts)
+    
+    st.markdown("### User Activity Trends")
+    df["created_at"] = pd.to_datetime(df["created_at"])
+    activity = df.groupby(df["created_at"].dt.date).size()
+    st.line_chart(activity)
