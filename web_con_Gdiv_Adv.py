@@ -50,13 +50,14 @@ def main():
             st.session_state["public_warning_shown"] = True
 
         # Render tabs
-        tabs = ["Add Link", "Browse Links", "Export Data"]
+        tabs = ["Add Link", "Browse Links", "Export Data", "Help"]
         if st.session_state["mode"] == "admin":
-            tabs.append("Analytics")
+            tabs.insert(-1, "Analytics")
         
-        tab1, tab2, tab3, *tab4 = st.tabs(tabs)
+        tab_objects = st.tabs(tabs)
+        tab_dict = {tab: tab_obj for tab, tab_obj in zip(tabs, tab_objects)}
         
-        with tab1:
+        with tab_dict["Add Link"]:
             new_df = add_link_section(st.session_state["df"], excel_file, st.session_state["mode"])
             if new_df is not None:
                 if st.session_state["mode"] == "public":
@@ -64,15 +65,25 @@ def main():
                 else:
                     st.session_state["df"] = new_df
         
-        with tab2:
+        with tab_dict["Browse Links"]:
             browse_section(st.session_state["df"], excel_file, st.session_state["mode"])
         
-        with tab3:
+        with tab_dict["Export Data"]:
             download_section(st.session_state["df"], excel_file, st.session_state["mode"])
         
-        if st.session_state["mode"] == "admin" and tab4:
-            with tab4[0]:
+        if st.session_state["mode"] == "admin" and "Analytics" in tab_dict:
+            with tab_dict["Analytics"]:
                 analytics_section(st.session_state["df"])
+        
+        with tab_dict["Help"]:
+            st.markdown("<h3>User Guide</h3>", unsafe_allow_html=True)
+            try:
+                with open("docs/USER_GUIDE.md", "r") as f:
+                    user_guide = f.read()
+                st.markdown(user_guide)
+            except FileNotFoundError:
+                st.error("❌ User Guide not found. Please contact support.")
+                logging.error("Failed to load USER_GUIDE.md")
 
 if __name__ == "__main__":
     main()
