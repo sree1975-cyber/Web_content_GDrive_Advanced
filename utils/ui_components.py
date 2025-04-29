@@ -316,12 +316,29 @@ def add_link_section(df, excel_file, mode):
                     st.session_state['metadata_fetched'] = True
                 st.rerun()
         
-        # Debug button for session state
-        if st.button("Clear Session State (Debug)", help="Reset session state for testing"):
-            for key in list(st.session_state.keys()):
-                st.session_state[key] = None
-            logging.debug("Session state cleared")
-            st.rerun()
+        # Debug Tools Expander
+        with st.expander("Debug Tools", expanded=False):
+            st.markdown("### Debug Information")
+            if st.button("Show Session State Keys", help="Display non-sensitive session state keys"):
+                protected_keys = ['mode', 'username', 'df', 'user_df', 'public_warning_shown', 'layout_mode']
+                safe_keys = [k for k in st.session_state.keys() if k not in protected_keys]
+                st.write(f"Session state keys: {safe_keys}")
+                logging.debug(f"Displayed session state keys: {safe_keys}")
+            
+            if st.button("Show Tag Info", help="Display suggested tags and metadata"):
+                st.write(f"Suggested tags: {st.session_state.get('suggested_tags', [])}")
+                st.write(f"Auto title: {st.session_state.get('auto_title', '')}")
+                st.write(f"Auto description: {st.session_state.get('auto_description', '')}")
+                logging.debug(f"Tag info: suggested_tags={st.session_state.get('suggested_tags', [])}, title={st.session_state.get('auto_title', '')}")
+            
+            if st.button("Clear Non-Critical Session State", help="Reset non-critical session state for testing"):
+                protected_keys = ['mode', 'username', 'df', 'user_df', 'public_warning_shown', 'layout_mode']
+                keys_to_delete = [k for k in st.session_state.keys() if k not in protected_keys]
+                for key in keys_to_delete:
+                    del st.session_state[key]
+                logging.debug(f"Cleared session state keys: {keys_to_delete}")
+                st.success("✅ Non-critical session state cleared")
+                st.rerun()
         
         with st.form("single_url_form", clear_on_submit=True):
             url = st.text_input(
@@ -510,6 +527,9 @@ def browse_section(df, excel_file, mode):
     # Normalize column types
     df["tags"] = df["tags"].apply(lambda x: str(x) if pd.notnull(x) else "")
     df["is_duplicate"] = df["is_duplicate"].astype(bool)
+    
+    # Debug DataFrame shape
+    st.write(f"Debug: DataFrame shape before filtering: {df.shape}")
     
     # Search and filter inputs in a single row
     col1, col2, col3 = st.columns([2, 2, 1])
