@@ -7,6 +7,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 import requests
 from bs4 import BeautifulSoup
+import requests.exceptions
 
 # Check for newspaper3k availability
 try:
@@ -71,7 +72,7 @@ def fetch_metadata(url):
             description = article.meta_description or article.text[:200] or ""
         else:
             # Fallback to BeautifulSoup
-            response = requests.get(url, headers=headers, timeout=5, verify=True)
+            response = requests.get(url, headers=headers, timeout=10, verify=True)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")
             title = soup.find("title").text if soup.find("title") else ""
@@ -80,13 +81,13 @@ def fetch_metadata(url):
             if meta_desc and meta_desc.get("content"):
                 description = meta_desc["content"]
         return {"title": title, "description": description}
-    except requests.Timeout:
+    except requests.exceptions.Timeout:
         logging.error(f"Metadata fetch timed out for {url}")
         return {"title": "", "description": ""}
-    except requests.SSLError as ssl_err:
+    except requests.exceptions.SSLError as ssl_err:
         logging.error(f"SSL error for {url}: {str(ssl_err)}")
         return {"title": "", "description": ""}
-    except requests.ConnectionError as conn_err:
+    except requests.exceptions.ConnectionError as conn_err:
         logging.error(f"Connection error for {url}: {str(conn_err)}")
         return {"title": "", "description": ""}
     except Exception as e:
@@ -234,11 +235,17 @@ def process_bookmark_file(df, uploaded_file, mode, duplicate_action, progress_ba
             total_links = len(links)
             
             for i, link in enumerate(links):
-                metadata = fetch_metadata(link["url"])
-                if metadata.get("title") and not link["title"]:
-                    link["title"] = metadata["title"]
-                if metadata.get("description") and not link["description"]:
-                    link["description"] = metadata["description"]
+                try:
+                    metadata = fetch_metadata(link["url"])
+                    if metadata.get("title") and not link["title"]:
+                        link["title"] = metadata["title"]
+                    if metadata.get("description") and not link["description"]:
+                        link["description"] = metadata["description"]
+                except Exception as e:
+                    logging.error(f"Metadata fetch failed for {link['url']}: {str(e)}")
+                    link["title"] = link.get("title", "")
+                    link["description"] = link.get("description", "")
+                
                 link["is_duplicate"] = link["url"] in existing_urls
                 if link["is_duplicate"] and duplicate_action == "Skip Duplicates":
                     continue
