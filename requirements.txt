@@ -5,7 +5,7 @@ beautifulsoup4==4.12.3
 gspread==6.1.3
 oauth2client==4.1.3
 openpyxl==3.1.5
-scikit-learn==1.5.2
+scikit-learn>=1.5.2
 newspaper3k==0.2.8
 spacy==3.7.6
 google-api-python-client==2.149.0
