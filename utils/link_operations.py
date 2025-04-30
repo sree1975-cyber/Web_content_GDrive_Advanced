@@ -58,8 +58,11 @@ def train_classifier():
 
 @st.cache_data
 def fetch_metadata(url):
-    """Fetch metadata for a given URL, with caching"""
+    """Fetch metadata for a given URL, with caching and improved error handling"""
     try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
         if NEWSPAPER_AVAILABLE:
             article = Article(url)
             article.download()
@@ -68,7 +71,7 @@ def fetch_metadata(url):
             description = article.meta_description or article.text[:200] or ""
         else:
             # Fallback to BeautifulSoup
-            response = requests.get(url, timeout=5)
+            response = requests.get(url, headers=headers, timeout=5, verify=True)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")
             title = soup.find("title").text if soup.find("title") else ""
@@ -77,6 +80,15 @@ def fetch_metadata(url):
             if meta_desc and meta_desc.get("content"):
                 description = meta_desc["content"]
         return {"title": title, "description": description}
+    except requests.Timeout:
+        logging.error(f"Metadata fetch timed out for {url}")
+        return {"title": "", "description": ""}
+    except requests.SSLError as ssl_err:
+        logging.error(f"SSL error for {url}: {str(ssl_err)}")
+        return {"title": "", "description": ""}
+    except requests.ConnectionError as conn_err:
+        logging.error(f"Connection error for {url}: {str(conn_err)}")
+        return {"title": "", "description": ""}
     except Exception as e:
         logging.error(f"Metadata fetch failed for {url}: {str(e)}")
         return {"title": "", "description": ""}
@@ -111,13 +123,18 @@ def save_link(df, url, title, description, tags, priority, number, mode):
         logging.error(f"Save link failed: {str(e)}")
         return df
 
-def delete_selected_links(df, selected_ids, excel_file, mode):
-    """Delete selected links from the DataFrame"""
+def delete_selected_links(df, selected_ids, excel_file, mode, folder_id):
+    """Delete selected links from the DataFrame and save to Google Drive"""
     try:
         updated_df = df[~df["link_id"].isin(selected_ids)].reset_index(drop=True)
         if mode in ["admin", "guest"] and excel_file:
             from utils.data_manager import save_data
-            save_data(updated_df, excel_file)
+            if save_data(updated_df, excel_file, folder_id):
+                logging.debug(f"Data saved to {excel_file} with folder_id={folder_id} after deletion")
+            else:
+                logging.error("Failed to save data to Google Drive after deletion")
+                st.error("Failed to save data to Google Drive")
+                return df
         return updated_df
     except Exception as e:
         st.error(f"Error deleting links: {str(e)}")
